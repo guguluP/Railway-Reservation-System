@@ -41,11 +41,13 @@ public class RailwayApp extends Application {
     private Label statusLabel;
     private TabPane tabPane;
     private Label userLabel;
+    private Stage primaryStage;
 
     private static final List<String> CLASS_OPTIONS = List.of("SL", "3A", "2A", "1A");
 
     @Override
     public void start(Stage primaryStage) {
+        this.primaryStage = primaryStage;
         dataService.load();
 
         BorderPane root = new BorderPane();
@@ -255,6 +257,7 @@ public class RailwayApp extends Application {
     private void openBookingDialog(Train train) {
         Stage dialog = new Stage();
         dialog.initModality(Modality.APPLICATION_MODAL);
+        dialog.initOwner(primaryStage);
         dialog.setTitle("Book Ticket • " + train.getTrainNo());
 
         VBox root = new VBox(14);
@@ -461,6 +464,7 @@ public class RailwayApp extends Application {
 
         Stage success = new Stage();
         success.initModality(Modality.APPLICATION_MODAL);
+        success.initOwner(primaryStage);
         success.setTitle("Booking Confirmed");
 
         VBox box = new VBox(12);
@@ -505,6 +509,7 @@ public class RailwayApp extends Application {
 
         Stage payDialog = new Stage();
         payDialog.initModality(Modality.APPLICATION_MODAL);
+        payDialog.initOwner(primaryStage);
         payDialog.setTitle("RailPay • Secure Payment");
 
         VBox root = new VBox(14);
@@ -538,7 +543,7 @@ public class RailwayApp extends Application {
             methodBtns[i] = b;
             methodBar.getChildren().add(b);
         }
-        methodBtns[0].setSelected(true); // default Card
+        methodGroup.selectToggle(methodBtns[0]); // default Card
 
         // Dynamic form area
         VBox formArea = new VBox(10);
@@ -552,7 +557,9 @@ public class RailwayApp extends Application {
             public void run() {
                 formArea.getChildren().clear();
 
-                String method = (String) methodGroup.getSelectedToggle().getUserData();
+                Toggle sel = methodGroup.getSelectedToggle();
+                String method = (sel != null) ? (String) sel.getUserData() : "Credit Card";
+                if (method == null) method = "Credit Card";
 
                 VBox form = new VBox(8);
                 form.getStyleClass().add("payment-form");
@@ -660,8 +667,11 @@ public class RailwayApp extends Application {
             ToggleButton selected = (ToggleButton) methodGroup.getSelectedToggle();
             String method = selected != null ? (String) selected.getUserData() : "Credit Card";
 
-            VBox currentForm = (VBox) formArea.getChildren().get(0);
-            Object[] data = (Object[]) currentForm.getUserData();
+            VBox currentForm = null;
+            if (!formArea.getChildren().isEmpty() && formArea.getChildren().get(0) instanceof VBox) {
+                currentForm = (VBox) formArea.getChildren().get(0);
+            }
+            Object[] data = (currentForm != null) ? (Object[]) currentForm.getUserData() : null;
 
             // Simulate payment decision
             boolean success = simulatePayment(method, data);
@@ -725,6 +735,7 @@ public class RailwayApp extends Application {
                                     double totalFare, String method, String txnId) {
         Stage receipt = new Stage();
         receipt.initModality(Modality.APPLICATION_MODAL);
+        receipt.initOwner(primaryStage);
         receipt.setTitle("Payment Receipt • RailPay");
 
         VBox box = new VBox(10);

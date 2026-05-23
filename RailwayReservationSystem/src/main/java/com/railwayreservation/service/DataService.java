@@ -209,7 +209,6 @@ public class DataService {
         }
         return new ArrayList<>(stations);
     }
-    }
 
     /**
      * Search trains by route (case-insensitive contains for flexibility).
