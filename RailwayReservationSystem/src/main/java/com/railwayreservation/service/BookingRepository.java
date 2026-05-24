@@ -8,6 +8,7 @@ import com.railwayreservation.model.Passenger;
 import java.sql.*;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 public class BookingRepository {
 
@@ -47,6 +48,26 @@ public class BookingRepository {
                 )
             """);
         }
+        ensureColumn("bookings", "passengers_json", "TEXT");
+    }
+
+    private void ensureColumn(String tableName, String columnName, String definition) throws SQLException {
+        if (!columnExists(tableName, columnName)) {
+            try (Statement stmt = connection.createStatement()) {
+                stmt.execute("ALTER TABLE " + tableName + " ADD COLUMN " + columnName + " " + definition);
+            }
+        }
+    }
+
+    private boolean columnExists(String tableName, String columnName) throws SQLException {
+        String sql = "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = ? AND COLUMN_NAME = ?";
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            ps.setString(1, tableName.toUpperCase(Locale.ROOT));
+            ps.setString(2, columnName.toUpperCase(Locale.ROOT));
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next() && rs.getInt(1) > 0;
+            }
+        }
     }
 
     public void save(Booking booking) {
@@ -60,7 +81,7 @@ public class BookingRepository {
         String sql = """
             MERGE INTO bookings (pnr, user_name, train_no, train_name, journey_date, cls, total_fare,
                                  booked_at, payment_method, transaction_id, payment_status, passengers_json)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            KEY(pnr) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """;
 
         try (PreparedStatement ps = connection.prepareStatement(sql)) {

@@ -1,8 +1,10 @@
-# 🚂 RailReserve — Railway Reservation System
+# 🚂 IRCTC Rail Connect — Railway Reservation System (IRCTC-Style UI)
 
 **JavaFX + Heavy CSS** desktop application built as a modern practice project in the Coding Practice workspace.
 
-A fully functional, visually polished train ticket booking system with interactive seat maps, PNR generation, persistence via JSON, search, bookings, and admin management.
+IRCTC-style professional blue-white-orange redesign of the main search experience (hero form, station codes in parens "Name (CODE)", swap, return date toggle, class/quota, flexible/avail filters, prominent search) while fully preserving all existing functionality: real 65-train timetable data, station code resolution (codes/names/partials), H2 DB bookings, dynamic per-class interactive seat maps, payment simulation, PNR receipts, admin, etc.
+
+A fully functional, visually polished train ticket booking system with interactive seat maps, PNR generation, persistence via JSON, search, bookings, and admin management. (Updated 2026-05-24 for IRCTC UI v2)
 
 ## ✨ Features (MVP v1)
 

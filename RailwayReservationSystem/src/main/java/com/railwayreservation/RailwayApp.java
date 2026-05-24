@@ -3,6 +3,7 @@ package com.railwayreservation;
 import com.railwayreservation.model.Booking;
 import com.railwayreservation.model.Passenger;
 import com.railwayreservation.model.Train;
+import com.railwayreservation.model.ScheduleStop;
 import com.railwayreservation.service.DataService;
 import javafx.application.Application;
 import javafx.application.Platform;
@@ -31,17 +32,26 @@ import java.util.stream.IntStream;
 public class RailwayApp extends Application {
 
     private final DataService dataService = new DataService();
+    private final com.railwayreservation.service.UserRepository userRepository = new com.railwayreservation.service.UserRepository();
     private String currentUser = "Guest";
+    private String currentUserRole = "user";
 
     private ComboBox<String> fromBox;
     private ComboBox<String> toBox;
     private DatePicker datePicker;
+    private DatePicker returnDatePicker;
+    private CheckBox addReturnCheck;
+    private ComboBox<String> classCombo;
+    private ComboBox<String> quotaCombo;
+    private CheckBox flexibleDatesCheck;
+    private CheckBox availableSeatsOnlyCheck;
     private ListView<Train> resultsListView;
     private ListView<Booking> bookingsListView;
     private Label statusLabel;
     private TabPane tabPane;
     private Label userLabel;
     private Stage primaryStage;
+    private MenuButton profileMenu;
 
     private static final List<String> CLASS_OPTIONS = List.of("SL", "3A", "2A", "1A", "2S", "CC", "EC", "P");
 
@@ -49,9 +59,10 @@ public class RailwayApp extends Application {
     public void start(Stage primaryStage) {
         this.primaryStage = primaryStage;
         dataService.load();
+        dataService.registerOrUpdateUser(currentUser);
 
         BorderPane root = new BorderPane();
-        root.setTop(buildHeader());
+        root.setTop(buildIRCTCHeader());
         root.setCenter(buildMainContent());
         root.setBottom(buildStatusBar());
 
@@ -63,7 +74,7 @@ public class RailwayApp extends Application {
             System.out.println("⚠️ CSS not found at /styles/railway-reservation.css — UI will be unstyled");
         }
 
-        primaryStage.setTitle("RailReserve • Railway Reservation System");
+        primaryStage.setTitle("IRCTC Rail Connect • Book Train Tickets");
         primaryStage.setScene(scene);
         primaryStage.setOnCloseRequest(e -> dataService.saveAll());
         primaryStage.show();
@@ -73,55 +84,118 @@ public class RailwayApp extends Application {
         updateStatus();
     }
 
-    private Node buildHeader() {
-        HBox header = new HBox(15);
-        header.setPadding(new Insets(12, 20, 12, 20));
+    private Node buildIRCTCHeader() {
+        HBox header = new HBox(10);
+        header.setPadding(new Insets(8, 20, 8, 20));
         header.setAlignment(Pos.CENTER_LEFT);
-        header.getStyleClass().add("rail-header");
-
-        Label title = new Label("🚂 RailReserve");
-        title.getStyleClass().add("app-title");
-        title.setFont(Font.font(26));
-
-        Label subtitle = new Label("JavaFX Railway Reservation");
-        subtitle.getStyleClass().add("app-subtitle");
-
-        Region spacer = new Region();
-        HBox.setHgrow(spacer, Priority.ALWAYS);
-
-        userLabel = new Label("👤 " + currentUser);
-        userLabel.getStyleClass().add("user-label");
-
-        Button changeUserBtn = new Button("Change User");
-        changeUserBtn.getStyleClass().add("secondary-button");
-        changeUserBtn.setOnAction(e -> promptChangeUser());
-
-        Button refreshBtn = new Button("⟳ Refresh Data");
-        refreshBtn.getStyleClass().add("secondary-button");
-        refreshBtn.setOnAction(e -> {
+        header.getStyleClass().add("irctc-header");
+        Label logo = new Label("IRCTC");
+        logo.getStyleClass().add("irctc-logo");
+        Label tag = new Label("Rail Connect");
+        tag.getStyleClass().add("irctc-tag");
+        HBox leftBox = new HBox(logo, tag);
+        leftBox.setAlignment(Pos.CENTER_LEFT);
+        HBox nav = new HBox(2);
+        nav.setAlignment(Pos.CENTER);
+        Label trainsNav = new Label("Trains");
+        trainsNav.getStyleClass().addAll("nav-link", "active");
+        Label flightsNav = new Label("Flights");
+        flightsNav.getStyleClass().add("nav-link");
+        flightsNav.setOnMouseClicked(e -> showAlert(Alert.AlertType.INFORMATION, "Info", "Flights demo not implemented in this prototype"));
+        Label hotelsNav = new Label("Hotels");
+        hotelsNav.getStyleClass().add("nav-link");
+        hotelsNav.setOnMouseClicked(e -> showAlert(Alert.AlertType.INFORMATION, "Info", "Hotels demo not implemented in this prototype"));
+        Label pnrNav = new Label("PNR Status");
+        pnrNav.getStyleClass().add("nav-link");
+        pnrNav.setOnMouseClicked(e -> showAlert(Alert.AlertType.INFORMATION, "Info", "PNR demo not implemented in this prototype"));
+        nav.getChildren().addAll(trainsNav, flightsNav, hotelsNav, pnrNav);
+        Region centerGrow = new Region();
+        HBox.setHgrow(centerGrow, Priority.ALWAYS);
+        Label lang = new Label("EN | HI");
+        lang.getStyleClass().add("lang-label");
+        profileMenu = new MenuButton("👤 " + currentUser);
+        profileMenu.getStyleClass().add("profile-menu");
+        MenuItem changeUserItem = new MenuItem("Login");
+        changeUserItem.setOnAction(e -> showUserSelectionDialog());
+        MenuItem myBookingsItem = new MenuItem("My Bookings");
+        myBookingsItem.setOnAction(e -> { if (tabPane != null) tabPane.getSelectionModel().select(1); });
+        MenuItem adminItem = new MenuItem("Manage Trains");
+        adminItem.setOnAction(e -> { if (tabPane != null) tabPane.getSelectionModel().select(2); });
+        MenuItem refreshItem = new MenuItem("⟳ Refresh Data");
+        refreshItem.setOnAction(e -> {
             dataService.load();
             refreshStations();
             updateStatus();
             if (resultsListView != null) resultsListView.getItems().clear();
             if (bookingsListView != null) refreshBookingsView();
         });
-
-        header.getChildren().addAll(title, subtitle, spacer, userLabel, changeUserBtn, refreshBtn);
+        MenuItem logoutItem = new MenuItem("Logout");
+        logoutItem.setOnAction(e -> {
+            currentUser = "Guest";
+            profileMenu.setText("👤 " + currentUser);
+            refreshBookingsView();
+        });
+        profileMenu.getItems().addAll(changeUserItem, myBookingsItem, adminItem, refreshItem, new SeparatorMenuItem(), logoutItem);
+        HBox rightBox = new HBox(8, lang, profileMenu);
+        rightBox.setAlignment(Pos.CENTER_RIGHT);
+        header.getChildren().addAll(leftBox, nav, centerGrow, rightBox);
         return header;
     }
 
     private void promptChangeUser() {
-        TextInputDialog dialog = new TextInputDialog(currentUser);
-        dialog.setTitle("Change User");
-        dialog.setHeaderText("Enter your name for this session");
-        dialog.setContentText("Name:");
-        Optional<String> result = dialog.showAndWait();
-        result.ifPresent(name -> {
-            if (!name.trim().isEmpty()) {
-                currentUser = name.trim();
-                userLabel.setText("👤 " + currentUser);
-                refreshBookingsView();
+        showUserSelectionDialog();
+    }
+
+    private void showUserSelectionDialog() {
+        Dialog<String> dialog = new Dialog<>();
+        dialog.setTitle("Select or Register User");
+        dialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
+
+        VBox content = new VBox(12);
+        content.setPadding(new Insets(16));
+
+        Label existingLbl = new Label("Existing users:");
+        ComboBox<String> usersCombo = new ComboBox<>();
+        List<String> allUsers = dataService.getAllUsernames();
+        if (allUsers.isEmpty()) allUsers.add("Guest");
+        usersCombo.getItems().addAll(allUsers);
+        usersCombo.setValue(currentUser);
+
+        Label newLbl = new Label("Register new user:");
+        TextField newUserField = new TextField();
+        newUserField.setPromptText("New username");
+
+        content.getChildren().addAll(existingLbl, usersCombo, newLbl, newUserField);
+        dialog.getDialogPane().setContent(content);
+
+        dialog.setResultConverter(btn -> {
+            if (btn == ButtonType.OK) {
+                String newName = newUserField.getText();
+                if (newName != null && !newName.trim().isEmpty()) {
+                    return newName.trim();
+                }
+                return usersCombo.getValue();
             }
+            return null;
+        });
+
+        java.util.Optional<String> result = dialog.showAndWait();
+        result.ifPresent(name -> {
+            if (name == null || name.trim().isEmpty()) return;
+            String finalName = name.trim();
+            dataService.registerOrUpdateUser(finalName);
+            currentUser = finalName;
+            currentUserRole = "user";
+            try {
+                if (userRepository.userExists("admin") && finalName.equalsIgnoreCase("admin")) {
+                    currentUserRole = "admin";
+                }
+            } catch (Exception ignored) {}
+            if (profileMenu != null) {
+                profileMenu.setText("👤 " + currentUser + ("admin".equals(currentUserRole) ? " (admin)" : ""));
+            }
+            dataService.updateUserLogin(currentUser);
+            refreshBookingsView();
         });
     }
 
@@ -138,45 +212,95 @@ public class RailwayApp extends Application {
     }
 
     private Node buildSearchTab() {
-        VBox container = new VBox(15);
-        container.setPadding(new Insets(20));
-        container.getStyleClass().add("search-container");
-
-        // Search form
-        HBox form = new HBox(12);
-        form.setAlignment(Pos.CENTER_LEFT);
-        form.getStyleClass().add("search-form");
-
-        Label fromLbl = new Label("From:");
+        VBox container = new VBox(8);
+        container.setPadding(new Insets(8));
+        container.getStyleClass().add("irctc-main");
+        Label heroTitle = new Label("Book Train Tickets");
+        heroTitle.getStyleClass().add("irctc-section-title");
+        Label heroSub = new Label("Search trains with confirmed availability across India");
+        heroSub.setStyle("-fx-text-fill:#555; -fx-font-size:12px;");
+        VBox heroBox = new VBox(2, heroTitle, heroSub);
+        heroBox.getStyleClass().add("hero-section");
+        VBox card = new VBox(12);
+        card.getStyleClass().add("search-card");
+        GridPane gp = new GridPane();
+        gp.setHgap(10);
+        gp.setVgap(8);
         fromBox = new ComboBox<>();
         fromBox.setEditable(true);
-        fromBox.setPrefWidth(180);
-
-        Label toLbl = new Label("To:");
+        fromBox.setPrefWidth(270);
         toBox = new ComboBox<>();
         toBox.setEditable(true);
-        toBox.setPrefWidth(180);
-
-        Label dateLbl = new Label("Date:");
+        toBox.setPrefWidth(270);
         datePicker = new DatePicker(LocalDate.now().plusDays(1));
-        datePicker.setPrefWidth(140);
-
+        datePicker.setPrefWidth(150);
+        returnDatePicker = new DatePicker(LocalDate.now().plusDays(3));
+        returnDatePicker.setPrefWidth(150);
+        returnDatePicker.setVisible(false);
+        returnDatePicker.setManaged(false);
+        addReturnCheck = new CheckBox("Return date");
+        addReturnCheck.setOnAction(e -> {
+            boolean s = addReturnCheck.isSelected();
+            returnDatePicker.setVisible(s);
+            returnDatePicker.setManaged(s);
+        });
+        Label fromIconLbl = new Label("📍 From");
+        fromIconLbl.getStyleClass().add("irctc-label");
+        Label toIconLbl = new Label("📍 To");
+        toIconLbl.getStyleClass().add("irctc-label");
+        Button swapBtn = new Button("↔");
+        swapBtn.getStyleClass().add("swap-btn");
+        swapBtn.setOnAction(e -> {
+            String t = fromBox.getValue();
+            fromBox.setValue(toBox.getValue());
+            toBox.setValue(t);
+        });
+        Label dateLbl = new Label("📅 Journey Date");
+        dateLbl.getStyleClass().add("irctc-label");
+        gp.add(fromIconLbl, 0, 0);
+        gp.add(fromBox, 1, 0);
+        gp.add(swapBtn, 2, 0);
+        gp.add(toIconLbl, 3, 0);
+        gp.add(toBox, 4, 0);
+        gp.add(dateLbl, 0, 1);
+        HBox dateBox = new HBox(6, datePicker, addReturnCheck, returnDatePicker);
+        dateBox.setAlignment(Pos.CENTER_LEFT);
+        gp.add(dateBox, 1, 1, 4, 1);
+        classCombo = new ComboBox<>();
+        classCombo.getItems().addAll("All Classes", "Sleeper (SL)", "AC 3 Tier (3A)", "AC 2 Tier (2A)", "AC First (1A)", "Chair Car (CC)", "Second Sitting (2S)", "Executive (EC)", "General (P)");
+        classCombo.setValue("All Classes");
+        classCombo.setPrefWidth(180);
+        quotaCombo = new ComboBox<>();
+        quotaCombo.getItems().addAll("General (GN)", "Ladies (LD)", "Lower Berth / Sr. Citizen", "Person with Disability (Divyangjan)", "Tatkal (TQ)", "Premium Tatkal (PT)");
+        quotaCombo.setValue("General (GN)");
+        quotaCombo.setPrefWidth(200);
+        Label clsLbl = new Label("Class");
+        clsLbl.getStyleClass().add("irctc-label");
+        Label qtaLbl = new Label("Quota");
+        qtaLbl.getStyleClass().add("irctc-label");
+        gp.add(clsLbl, 0, 2);
+        gp.add(classCombo, 1, 2);
+        gp.add(qtaLbl, 3, 2);
+        gp.add(quotaCombo, 4, 2);
+        flexibleDatesCheck = new CheckBox("Flexible dates");
+        availableSeatsOnlyCheck = new CheckBox("Search for trains with available seats only");
+        HBox filterBox = new HBox(20, flexibleDatesCheck, availableSeatsOnlyCheck);
+        filterBox.setAlignment(Pos.CENTER_LEFT);
+        gp.add(filterBox, 0, 3, 5, 1);
+        fromBox.focusedProperty().addListener((obs, was, is) -> { if (is) fromBox.show(); });
+        toBox.focusedProperty().addListener((obs, was, is) -> { if (is) toBox.show(); });
+        card.getChildren().add(gp);
         Button searchBtn = new Button("🔍 SEARCH TRAINS");
-        searchBtn.getStyleClass().add("primary-button");
+        searchBtn.getStyleClass().add("irctc-search-btn");
         searchBtn.setOnAction(e -> performSearch());
-
-        form.getChildren().addAll(fromLbl, fromBox, toLbl, toBox, dateLbl, datePicker, searchBtn);
-
-        // Results
+        card.getChildren().add(searchBtn);
         Label resultsTitle = new Label("Available Trains");
-        resultsTitle.getStyleClass().add("section-title");
-
+        resultsTitle.getStyleClass().add("irctc-section-title");
         resultsListView = new ListView<>();
-        resultsListView.setPrefHeight(420);
+        resultsListView.setPrefHeight(380);
         resultsListView.setCellFactory(createTrainCellFactory());
-
         VBox.setVgrow(resultsListView, Priority.ALWAYS);
-        container.getChildren().addAll(form, resultsTitle, resultsListView);
+        container.getChildren().addAll(heroBox, card, resultsTitle, resultsListView);
         return container;
     }
 
@@ -227,7 +351,18 @@ public class RailwayApp extends Application {
 
                 Button bookBtn = new Button("Book Now →");
                 bookBtn.getStyleClass().add("primary-button");
-                bookBtn.setOnAction(ev -> openBookingDialog(train));
+                bookBtn.setOnAction(ev -> {
+                    String pref = null;
+                    if (classCombo != null) {
+                        String d = classCombo.getValue();
+                        if (d != null && !d.equals("All Classes") && d.contains("(") && d.endsWith(")")) {
+                            int o = d.lastIndexOf('(');
+                            int c = d.lastIndexOf(')');
+                            pref = d.substring(o + 1, c).trim();
+                        }
+                    }
+                    openBookingDialog(train, pref);
+                });
 
                 card.getChildren().addAll(info, spacer2, bookBtn);
                 setGraphic(card);
@@ -239,15 +374,28 @@ public class RailwayApp extends Application {
         String from = fromBox.getValue();
         String to = toBox.getValue();
         LocalDate date = datePicker.getValue();
-
         if (from == null || to == null || from.isBlank() || to.isBlank()) {
             showAlert(Alert.AlertType.WARNING, "Missing Info", "Please enter From and To stations.");
             return;
         }
-
         List<Train> results = dataService.searchTrains(from, to, date);
+        String clsDisplay = (classCombo != null) ? classCombo.getValue() : "All Classes";
+        boolean onlyAvail = (availableSeatsOnlyCheck != null) && availableSeatsOnlyCheck.isSelected();
+        if (clsDisplay != null && !clsDisplay.equals("All Classes") && onlyAvail) {
+            String code = null;
+            if (clsDisplay.contains("(") && clsDisplay.endsWith(")")) {
+                int o = clsDisplay.lastIndexOf('(');
+                int c = clsDisplay.lastIndexOf(')');
+                code = clsDisplay.substring(o + 1, c).trim();
+            }
+            if (code != null) {
+                final String fc = code;
+                results = results.stream()
+                    .filter(t -> t.getAvailableSeats() != null && t.getAvailableSeats().getOrDefault(fc, 0) > 0)
+                    .collect(Collectors.toList());
+            }
+        }
         resultsListView.setItems(FXCollections.observableArrayList(results));
-
         if (results.isEmpty()) {
             showAlert(Alert.AlertType.INFORMATION, "No Trains Found", "No matching trains for the selected route.");
         }
@@ -255,6 +403,10 @@ public class RailwayApp extends Application {
     }
 
     private void openBookingDialog(Train train) {
+        openBookingDialog(train, null);
+    }
+
+    private void openBookingDialog(Train train, String preselectClass) {
         Stage dialog = new Stage();
         dialog.initModality(Modality.APPLICATION_MODAL);
         dialog.initOwner(primaryStage);
@@ -264,12 +416,16 @@ public class RailwayApp extends Application {
         root.setPadding(new Insets(20));
         root.getStyleClass().add("booking-dialog");
 
-        // Train summary card
         HBox summary = new HBox(10);
         summary.getStyleClass().add("train-summary");
         Label sum = new Label(train.getTrainNo() + " • " + train.getName() + "\n" +
                 train.getSource() + " → " + train.getDestination() + "  |  " + train.getDeparture() + " - " + train.getArrival());
-        summary.getChildren().add(sum);
+        Region sumSpacer = new Region();
+        HBox.setHgrow(sumSpacer, Priority.ALWAYS);
+        Button routeBtn = new Button("🚉 View All Stops");
+        routeBtn.getStyleClass().add("secondary-button");
+        routeBtn.setOnAction(e -> showTrainRouteDialog(train));
+        summary.getChildren().addAll(sum, sumSpacer, routeBtn);
 
         HBox classRow = new HBox(8);
         classRow.setAlignment(Pos.CENTER_LEFT);
@@ -296,7 +452,19 @@ public class RailwayApp extends Application {
             tb.getStyleClass().add("class-toggle");
             classBtns.add(tb);
         }
-        classBtns.get(0).setSelected(true);
+        boolean didPre = false;
+        if (preselectClass != null) {
+            for (ToggleButton tb : classBtns) {
+                if (tb.getText().equals(preselectClass)) {
+                    tb.setSelected(true);
+                    didPre = true;
+                    break;
+                }
+            }
+        }
+        if (!didPre) {
+            classBtns.get(0).setSelected(true);
+        }
         classRow.getChildren().add(clsLbl);
         classRow.getChildren().addAll(classBtns);
 
@@ -1052,6 +1220,54 @@ public class RailwayApp extends Application {
         int tCount = dataService.getAllTrains().size();
         int bCount = dataService.getAllBookings().size();
         statusLabel.setText("📁 Data: ~/.railway-reservation/  •  " + tCount + " trains loaded  •  " + bCount + " total bookings  •  JavaFX + Heavy CSS");
+    }
+
+    private void showTrainRouteDialog(Train train) {
+        Stage routeDialog = new Stage();
+        routeDialog.initModality(Modality.APPLICATION_MODAL);
+        routeDialog.initOwner(primaryStage);
+        routeDialog.setTitle("Full Route • " + train.getTrainNo() + " " + train.getName());
+
+        VBox box = new VBox(8);
+        box.setPadding(new Insets(16));
+
+        Label title = new Label("All Stops (" + train.getSource() + " → " + train.getDestination() + ")");
+        title.getStyleClass().add("irctc-section-title");
+
+        ListView<ScheduleStop> stopsList = new ListView<>();
+        List<ScheduleStop> sched = train.getSchedule();
+        if (sched == null || sched.isEmpty()) {
+            ScheduleStop start = new ScheduleStop(train.getSource(), train.getDeparture());
+            ScheduleStop end = new ScheduleStop(train.getDestination(), train.getArrival());
+            stopsList.getItems().addAll(start, end);
+        } else {
+            stopsList.getItems().addAll(sched);
+        }
+
+        stopsList.setCellFactory(lv -> new ListCell<>() {
+            @Override
+            protected void updateItem(ScheduleStop stop, boolean empty) {
+                super.updateItem(stop, empty);
+                if (empty || stop == null) {
+                    setText(null);
+                    return;
+                }
+                String time = (stop.getTime() != null && !stop.getTime().isBlank()) ? stop.getTime() : "--:--";
+                setText("• " + stop.getStation() + "   " + time);
+            }
+        });
+        stopsList.setPrefHeight(Math.min(420, 60 + stopsList.getItems().size() * 22));
+
+        Label note = new Label("Times are as per current timetable data.");
+        note.setStyle("-fx-text-fill:#666; -fx-font-size:11px;");
+
+        box.getChildren().addAll(title, stopsList, note);
+
+        Scene scene = new Scene(box, 420, 480);
+        var cssUrl = getClass().getResource("/styles/railway-reservation.css");
+        if (cssUrl != null) scene.getStylesheets().add(cssUrl.toExternalForm());
+        routeDialog.setScene(scene);
+        routeDialog.showAndWait();
     }
 
     private void showAlert(Alert.AlertType type, String title, String msg) {

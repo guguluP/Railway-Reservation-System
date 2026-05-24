@@ -2037,35 +2037,5 @@
     "name": "Ahmedabad Asansol Express",
     "classes": "2A, 3A, SL, II, P",
     "frequency": "Th"
-  },
-  {
-    "trainNo": "18109",
-    "name": "Tatanagar Itwari Express",
-    "classes": "3A, SL, 2S, II",
-    "frequency": "Daily"
-  },
-  {
-    "trainNo": "12860",
-    "name": "Howrah Mumbai CSMT Gitanjali Express",
-    "classes": "2A, 3A, SL, II",
-    "frequency": "Daily"
-  },
-  {
-    "trainNo": "12871",
-    "name": "Howrah Titlagarh Ispat Express",
-    "classes": "3A, CC, 2S, II, P",
-    "frequency": "M, W, Sa"
-  },
-  {
-    "trainNo": "12112",
-    "name": "Amravati Mumbai CSMT Express",
-    "classes": "1A, 2A, 3A, SL, II",
-    "frequency": "Daily"
-  },
-  {
-    "trainNo": "18113",
-    "name": "Tatanagar Bilaspur Express",
-    "classes": "2A, 3A, SL, II",
-    "frequency": "Daily"
   }
 ]

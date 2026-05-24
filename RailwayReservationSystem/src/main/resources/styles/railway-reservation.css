@@ -525,3 +525,214 @@
     -fx-text-fill: #64748b;
     -fx-font-size: 10.5px;
 }
+.irctc-header {
+    -fx-background-color: #003366;
+    -fx-padding: 8 20;
+    -fx-border-color: #002244;
+    -fx-border-width: 0 0 2 0;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.15), 6, 0.2, 0, 2);
+}
+.irctc-logo {
+    -fx-text-fill: white;
+    -fx-font-weight: bold;
+    -fx-font-size: 22px;
+}
+.nav-link {
+    -fx-text-fill: #cce0ff;
+    -fx-padding: 6 14;
+    -fx-cursor: hand;
+    -fx-font-size: 13px;
+}
+.nav-link.active {
+    -fx-text-fill: white;
+    -fx-font-weight: bold;
+    -fx-border-color: #ff9933;
+    -fx-border-width: 0 0 3 0;
+    -fx-padding: 6 14 3 14;
+}
+.nav-link:hover {
+    -fx-text-fill: white;
+    -fx-scale-x: 1.02;
+    -fx-scale-y: 1.02;
+}
+.hero-section {
+    -fx-background-color: #e8f4fc;
+    -fx-padding: 24 32;
+}
+.search-card {
+    -fx-background-color: white;
+    -fx-background-radius: 10;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.08), 10, 0.25, 0, 3);
+    -fx-padding: 20;
+    -fx-border-color: #d1d9e0;
+    -fx-border-width: 1;
+    -fx-border-radius: 10;
+}
+.irctc-label {
+    -fx-text-fill: #212529;
+    -fx-font-size: 12px;
+    -fx-font-weight: 600;
+}
+.form-field {
+    -fx-pref-width: 260;
+    -fx-font-size: 14px;
+    -fx-padding: 6 8;
+    -fx-background-color: white;
+    -fx-border-color: #a0aec0;
+    -fx-border-radius: 6;
+}
+.swap-btn {
+    -fx-font-size: 16px;
+    -fx-background-color: #0066b3;
+    -fx-text-fill: white;
+    -fx-background-radius: 20;
+    -fx-padding: 2 10;
+    -fx-cursor: hand;
+    -fx-min-width: 32;
+}
+.swap-btn:hover {
+    -fx-background-color: #005599;
+}
+.irctc-search-btn {
+    -fx-background-color: #ff6b00;
+    -fx-text-fill: white;
+    -fx-font-weight: bold;
+    -fx-font-size: 14px;
+    -fx-padding: 10 36;
+    -fx-background-radius: 6;
+    -fx-cursor: hand;
+    -fx-effect: dropshadow(gaussian, rgba(255,107,0,0.25), 5, 0.3, 0, 1);
+}
+.irctc-search-btn:hover {
+    -fx-background-color: #e65c00;
+}
+.irctc-search-btn:pressed {
+    -fx-background-color: #cc5200;
+}
+.irctc-main {
+    -fx-background-color: #f8f9fa;
+}
+.irctc-input {
+    -fx-background-color: white;
+    -fx-border-color: #ced4da;
+    -fx-border-radius: 4;
+    -fx-padding: 4 8;
+}
+.filter-row .check-box {
+    -fx-text-fill: #333;
+}
+.search-card .combo-box .list-cell {
+    -fx-text-fill: #212529;
+}
+.search-card .combo-box-base {
+    -fx-background-color: white;
+    -fx-border-color: #a0aec0;
+}
+.search-card .date-picker {
+    -fx-background-color: white;
+}
+.irctc-section-title {
+    -fx-text-fill: #003366;
+    -fx-font-weight: bold;
+    -fx-font-size: 16px;
+}
+.irctc-tag {
+    -fx-text-fill: #99ccff;
+    -fx-font-size: 10px;
+    -fx-padding: 2 0 0 6;
+}
+.profile-menu {
+    -fx-background-color: transparent;
+    -fx-text-fill: #cce0ff;
+    -fx-padding: 2 8;
+}
+.profile-menu .label {
+    -fx-text-fill: #cce0ff;
+}
+.lang-label {
+    -fx-text-fill: #cce0ff;
+    -fx-padding: 0 12;
+    -fx-font-size: 12px;
+}
+.irctc-main .train-card {
+    -fx-background-color: #fff;
+    -fx-border-color: #d1d9e0;
+    -fx-border-width: 1;
+    -fx-background-radius: 6;
+    -fx-padding: 8;
+}
+.irctc-main .train-name {
+    -fx-text-fill: #003366;
+    -fx-font-weight: bold;
+    -fx-font-size: 13px;
+}
+.irctc-main .train-route {
+    -fx-text-fill: #444;
+}
+.irctc-main .train-times {
+    -fx-text-fill: #555;
+}
+.irctc-main .availability-pill {
+    -fx-background-color: #e8f4fc;
+    -fx-text-fill: #0066b3;
+    -fx-padding: 2 6;
+    -fx-background-radius: 4;
+}
+.irctc-main .frequency-pill {
+    -fx-background-color: #fff3e0;
+    -fx-text-fill: #e65100;
+    -fx-padding: 2 6;
+    -fx-background-radius: 4;
+}
+.irctc-main .list-view {
+    -fx-background-color: transparent;
+}
+.irctc-main .list-cell {
+    -fx-background-color: transparent;
+}
+.irctc-main .list-cell:filled:selected {
+    -fx-background-color: #e3f2fd;
+}
+.irctc-main .list-cell:filled:hover {
+    -fx-background-color: #f0f7ff;
+}
+.irctc-main .check-box {
+    -fx-text-fill: #333;
+}
+.irctc-main .combo-box .list-view {
+    -fx-background-color: white;
+}
+.search-card .label {
+    -fx-text-fill: #212529;
+}
+.search-card .combo-box,
+.irctc-main .combo-box,
+.search-card .combo-box-base,
+.irctc-main .combo-box-base {
+    -fx-background-color: white;
+    -fx-text-fill: #212529;
+    -fx-border-color: #a0aec0;
+    -fx-border-radius: 4;
+}
+.search-card .combo-box .list-cell,
+.search-card .combo-box-popup .list-view .list-cell,
+.irctc-main .combo-box .list-cell,
+.irctc-main .combo-box-popup .list-view .list-cell {
+    -fx-text-fill: #212529;
+    -fx-background-color: white;
+    -fx-padding: 4 8;
+}
+.search-card .combo-box-popup .list-view .list-cell:hover,
+.irctc-main .combo-box-popup .list-view .list-cell:hover {
+    -fx-background-color: #e8f4fc;
+    -fx-text-fill: #003366;
+}
+.search-card .combo-box-popup .list-view .list-cell:selected,
+.irctc-main .combo-box-popup .list-view .list-cell:selected {
+    -fx-background-color: #0066b3;
+    -fx-text-fill: white;
+}
+.search-card .combo-box .arrow,
+.irctc-main .combo-box .arrow {
+    -fx-background-color: #0066b3;
+}

@@ -8,6 +8,7 @@ import com.railwayreservation.model.Booking;
 import com.railwayreservation.model.Passenger;
 import com.railwayreservation.model.Train;
 import com.railwayreservation.model.ScheduleStop;
+import com.railwayreservation.model.User;
 import com.railwayreservation.util.PNRGenerator;
 
 import java.io.IOException;
@@ -30,6 +31,7 @@ public class DataService {
     private List<Train> trains = new ArrayList<>();
     private List<Booking> bookings = new ArrayList<>();
     private final BookingRepository bookingRepository;
+    private final UserRepository userRepository;
 
     private static final Map<String, Double> CLASS_MULTIPLIERS = Map.ofEntries(
         Map.entry("SL", 1.0),
@@ -114,6 +116,7 @@ public class DataService {
             .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
         ensureDataDir();
         this.bookingRepository = new BookingRepository();
+        this.userRepository = new UserRepository();
         migrateOldBookingsIfNeeded();
     }
 
@@ -321,7 +324,7 @@ public class DataService {
 
     private String formatStationDisplay(String station) {
         String code = NAME_TO_CODE.get(station);
-        return (code != null) ? code + " - " + station : station;
+        return (code != null) ? station + " (" + code + ")" : station;
     }
 
     public List<Train> searchTrains(String from, String to, LocalDate date) {
@@ -358,7 +361,21 @@ public class DataService {
     private String resolveStation(String input) {
         if (input == null || input.isBlank()) return "";
         String trimmed = input.trim();
-
+        if (trimmed.contains("(") && trimmed.contains(")")) {
+            int open = trimmed.lastIndexOf('(');
+            int close = trimmed.lastIndexOf(')');
+            if (open > 0 && close > open) {
+                String inside = trimmed.substring(open + 1, close).trim().toUpperCase();
+                if (CODE_TO_NAME.containsKey(inside)) {
+                    return CODE_TO_NAME.get(inside);
+                }
+                String before = trimmed.substring(0, open).trim();
+                if (NAME_TO_CODE.containsKey(before)) {
+                    return before;
+                }
+                if (!before.isEmpty()) return before;
+            }
+        }
         if (trimmed.contains(" - ")) {
             String[] parts = trimmed.split(" - ", 2);
             if (parts.length == 2) {
@@ -492,11 +509,33 @@ public class DataService {
                     bookingRepository.save(b);
                 }
                 System.out.println("Migrated " + old.size() + " bookings from JSON to database.");
-                // Optional: rename the old file
                 Files.move(oldBookings, DATA_DIR.resolve("bookings.json.bak"), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
             } catch (Exception e) {
                 System.err.println("Booking migration failed: " + e.getMessage());
             }
         }
+    }
+
+    public List<String> getAllUsernames() {
+        return userRepository.getAllUsernames();
+    }
+
+    public void registerOrUpdateUser(String username) {
+        if (username == null || username.trim().isEmpty()) return;
+        String name = username.trim();
+        if (!userRepository.userExists(name)) {
+            userRepository.createUser(name, "", "user");
+        }
+        userRepository.updateLastLogin(name);
+    }
+
+    public void updateUserLogin(String username) {
+        if (username != null && !username.trim().isEmpty()) {
+            userRepository.updateLastLogin(username.trim());
+        }
+    }
+
+    public boolean userExists(String username) {
+        return userRepository.userExists(username);
     }
 }
