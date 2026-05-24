@@ -4,6 +4,8 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.railwayreservation.model.Booking;
 import com.railwayreservation.model.Passenger;
+import com.zaxxer.hikari.HikariConfig;
+import com.zaxxer.hikari.HikariDataSource;
 
 import java.sql.*;
 import java.util.ArrayList;
@@ -12,25 +14,33 @@ import java.util.Locale;
 
 public class BookingRepository {
 
-    private static final String DB_URL = "jdbc:h2:file:" + System.getProperty("user.home") + "/.railway-reservation/railway;AUTO_SERVER=TRUE";
+    private static final String DB_URL = "jdbc:h2:file:" + System.getProperty("user.home") + "/.railway-reservation/railway;AUTO_SERVER=FALSE";
     private static final String DB_USER = "sa";
     private static final String DB_PASSWORD = "";
 
     private final ObjectMapper mapper = new ObjectMapper();
-    private Connection connection;
+    private final HikariDataSource dataSource;
 
     public BookingRepository() {
-        try {
-            Class.forName("org.h2.Driver");
-            connection = DriverManager.getConnection(DB_URL, DB_USER, DB_PASSWORD);
-            initSchema();
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to initialize database", e);
-        }
+        HikariConfig config = new HikariConfig();
+        config.setJdbcUrl(DB_URL);
+        config.setUsername(DB_USER);
+        config.setPassword(DB_PASSWORD);
+        config.setMaximumPoolSize(5);
+        config.setMinimumIdle(1);
+        config.setConnectionTimeout(30000);
+        this.dataSource = new HikariDataSource(config);
+        initSchema();
     }
 
-    private void initSchema() throws SQLException {
-        try (Statement stmt = connection.createStatement()) {
+    public BookingRepository(HikariDataSource sharedDs) {
+        this.dataSource = sharedDs;
+        initSchema();
+    }
+
+    private void initSchema() throws RuntimeException {
+        try (Connection conn = dataSource.getConnection();
+             Statement stmt = conn.createStatement()) {
             stmt.execute("""
                 CREATE TABLE IF NOT EXISTS bookings (
                     pnr VARCHAR(20) PRIMARY KEY,
@@ -47,26 +57,8 @@ public class BookingRepository {
                     passengers_json TEXT
                 )
             """);
-        }
-        ensureColumn("bookings", "passengers_json", "TEXT");
-    }
-
-    private void ensureColumn(String tableName, String columnName, String definition) throws SQLException {
-        if (!columnExists(tableName, columnName)) {
-            try (Statement stmt = connection.createStatement()) {
-                stmt.execute("ALTER TABLE " + tableName + " ADD COLUMN " + columnName + " " + definition);
-            }
-        }
-    }
-
-    private boolean columnExists(String tableName, String columnName) throws SQLException {
-        String sql = "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = ? AND COLUMN_NAME = ?";
-        try (PreparedStatement ps = connection.prepareStatement(sql)) {
-            ps.setString(1, tableName.toUpperCase(Locale.ROOT));
-            ps.setString(2, columnName.toUpperCase(Locale.ROOT));
-            try (ResultSet rs = ps.executeQuery()) {
-                return rs.next() && rs.getInt(1) > 0;
-            }
+        } catch (SQLException e) {
+            throw new RuntimeException("Failed to initialize booking schema", e);
         }
     }
 
@@ -84,7 +76,8 @@ public class BookingRepository {
             KEY(pnr) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """;
 
-        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setString(1, booking.getPnr());
             ps.setString(2, booking.getUserName());
             ps.setString(3, booking.getTrainNo());
@@ -105,9 +98,10 @@ public class BookingRepository {
 
     public List<Booking> findAll() {
         List<Booking> bookings = new ArrayList<>();
-        String sql = "SELECT * FROM bookings";
+        String sql = "SELECT * FROM bookings ORDER BY booked_at DESC";
 
-        try (Statement stmt = connection.createStatement();
+        try (Connection conn = dataSource.getConnection();
+             Statement stmt = conn.createStatement();
              ResultSet rs = stmt.executeQuery(sql)) {
 
             while (rs.next()) {
@@ -144,7 +138,9 @@ public class BookingRepository {
     }
 
     public void deleteByPnr(String pnr) {
-        try (PreparedStatement ps = connection.prepareStatement("DELETE FROM bookings WHERE pnr = ?")) {
+        String sql = "DELETE FROM bookings WHERE pnr = ?";
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setString(1, pnr);
             ps.executeUpdate();
         } catch (SQLException e) {
@@ -154,9 +150,10 @@ public class BookingRepository {
 
     public void close() {
         try {
-            if (connection != null && !connection.isClosed()) {
-                connection.close();
+            if (dataSource != null && !dataSource.isClosed()) {
+                dataSource.close();
             }
-        } catch (SQLException ignored) {}
+        } catch (Exception ignored) {}
     }
 }
+

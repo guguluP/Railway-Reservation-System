@@ -10,6 +10,8 @@ import com.railwayreservation.model.Train;
 import com.railwayreservation.model.ScheduleStop;
 import com.railwayreservation.model.User;
 import com.railwayreservation.util.PNRGenerator;
+import com.zaxxer.hikari.HikariConfig;
+import com.zaxxer.hikari.HikariDataSource;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -28,10 +30,11 @@ public class DataService {
     private static final Path TRAINS_FILE = DATA_DIR.resolve("trains.json");
 
     private final ObjectMapper mapper;
-    private List<Train> trains = new ArrayList<>();
+    private List<Train> trains = Collections.synchronizedList(new ArrayList<>());
     private List<Booking> bookings = new ArrayList<>();
     private final BookingRepository bookingRepository;
     private final UserRepository userRepository;
+    private final HikariDataSource sharedDataSource;
     // Protect load/save/book operations from concurrent access
     private final Object lock = new Object();
 
@@ -114,11 +117,23 @@ public class DataService {
 
     public DataService() {
         this.mapper = new ObjectMapper()
-            .enable(SerializationFeature.INDENT_OUTPUT)
-            .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+            .enable(com.fasterxml.jackson.databind.SerializationFeature.INDENT_OUTPUT)
+            .configure(com.fasterxml.jackson.databind.DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
         ensureDataDir();
-        this.bookingRepository = new BookingRepository();
-        this.userRepository = new UserRepository();
+        
+        // Create shared HikariCP datasource
+        HikariConfig config = new HikariConfig();
+        config.setJdbcUrl("jdbc:h2:file:" + System.getProperty("user.home") + "/.railway-reservation/railway;AUTO_SERVER=FALSE");
+        config.setUsername("sa");
+        config.setPassword("");
+        config.setMaximumPoolSize(5);
+        config.setMinimumIdle(1);
+        config.setConnectionTimeout(30000);
+        this.sharedDataSource = new HikariDataSource(config);
+        
+        // Share datasource between repositories
+        this.bookingRepository = new BookingRepository(sharedDataSource);
+        this.userRepository = new UserRepository(sharedDataSource);
         migrateOldBookingsIfNeeded();
     }
 
@@ -526,11 +541,13 @@ public class DataService {
         if (username == null || username.trim().isEmpty()) return;
         String name = username.trim();
         if (!userRepository.userExists(name)) {
-            // Legacy path (e.g. initial "Guest"). Real users must register via the password dialog.
-            // Empty password allows legacy "login" with blank password for Guest only.
-            userRepository.createUser(name, "Guest".equalsIgnoreCase(name) ? "" : "legacy-no-password", "user");
+            // Guest user with no password (no account creation)
+            if (!"Guest".equalsIgnoreCase(name)) {
+                userRepository.createUser(name, "", "user");
+            }
+        } else {
+            userRepository.updateLastLogin(name);
         }
-        userRepository.updateLastLogin(name);
     }
 
     public void updateUserLogin(String username) {
