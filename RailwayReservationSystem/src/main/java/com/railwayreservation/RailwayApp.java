@@ -1451,8 +1451,8 @@ public class RailwayApp extends Application {
 
         // Current trains table (simple ListView for admin too for consistency)
         adminListView = new ListView<>();
-        adminList.setPrefHeight(280);
-        adminList.setCellFactory(lv -> new ListCell<>() {
+        adminListView.setPrefHeight(280);
+        adminListView.setCellFactory(lv -> new ListCell<>() {
             @Override
             protected void updateItem(Train t, boolean empty) {
                 super.updateItem(t, empty);
@@ -1462,20 +1462,20 @@ public class RailwayApp extends Application {
             }
         });
 
-        adminList.setOnMouseClicked(e -> {
-            Train sel = adminList.getSelectionModel().getSelectedItem();
+        adminListView.setOnMouseClicked(e -> {
+            Train sel = adminListView.getSelectionModel().getSelectedItem();
             if (sel != null) {
                 // prefill form
                 // (omitted full two-way for brevity in this version, user can manually edit)
             }
         });
 
-        container.getChildren().addAll(title, form, adminActions, new Label("Current Trains:"), adminList);
-        VBox.setVgrow(adminList, Priority.ALWAYS);
+        container.getChildren().addAll(title, form, adminActions, new Label("Current Trains:"), adminListView);
+        VBox.setVgrow(adminListView, Priority.ALWAYS);
 
         // load initial
         Platform.runLater(() -> {
-            adminList.setItems(FXCollections.observableArrayList(dataService.getAllTrains()));
+            adminListView.setItems(FXCollections.observableArrayList(dataService.getAllTrains()));
         });
 
         return container;
