@@ -1,0 +1,14 @@
+{
+  "metadata": {
+    "description": "Restructured Indian Railways timetable data extracted from PDFs (Delhi-Howrah/Patna corridor focus)",
+    "source_files": ["1.pdf", "2.pdf", "3.pdf", "4.pdf", "5.pdf"],
+    "note": "Full raw content was provided in the development session on 2026-05-24. Use the accompanying parse_railway_timetables.py to convert into real-trains.json format for the Java app."
+  },
+  "documents": [
+    {
+      "file_name": "1.pdf",
+      "total_pages": 6,
+      "note": "Contains ~28+ trains with full station timings for the corridor (15484 Mahananda, 12312 Kalka Howrah, Rajdhani, Poorva, Duronto, Humsafar, etc.). See raw text in session history for complete extraction."
+    }
+  ]
+}

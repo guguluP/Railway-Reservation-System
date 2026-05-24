@@ -47,7 +47,7 @@ public class DataService {
 
     private static final List<String> VALID_CLASSES = List.of("1A", "2A", "3A", "3E", "SL", "SLIIP", "EC", "CC", "P");
 
-    /** Master corridor stations compiled from real timetable extractions (Delhi-Howrah/Patna corridor) */
+    /** Master corridor stations compiled from real timetable extractions (Delhi-Howrah/Patna corridor) — see data/raw-timetables.json + parse script */
     private static final List<String> MASTER_STATIONS = List.of(
         "Delhi", "New Delhi", "Anand Vihar (T)", "Ghaziabad", "Khurja", "Aligarh", "Mathura", "Agra Cantt.",
         "Tundla", "Firozabad", "Shikohabad", "Etawah", "Kanpur", "Fatehpur", "Unchahar", "Prayag",
@@ -524,7 +524,9 @@ public class DataService {
         if (username == null || username.trim().isEmpty()) return;
         String name = username.trim();
         if (!userRepository.userExists(name)) {
-            userRepository.createUser(name, "", "user");
+            // Legacy path (e.g. initial "Guest"). Real users must register via the password dialog.
+            // Empty password allows legacy "login" with blank password for Guest only.
+            userRepository.createUser(name, "Guest".equalsIgnoreCase(name) ? "" : "legacy-no-password", "user");
         }
         userRepository.updateLastLogin(name);
     }

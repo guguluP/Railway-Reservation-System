@@ -19,10 +19,10 @@ A fully functional, visually polished train ticket booking system with interacti
 - **PNR generation** and beautiful confirmation screen with big styled PNR display
 - **My Bookings** tab with list of all bookings (filtered by current user), cancel functionality (restores seats)
 - **Manage Trains** admin tab — add/update custom trains + reload sample data
-- **Change User** — simple session name for demo multi-user feel
+- **Login / Register** — proper username + password authentication (BCrypt + optional MySQL backend)
 - **Full persistence**: trains + bookings saved to `~/.railway-reservation/` (JSON, survives restarts)
 - **Heavy CSS**: 200+ lines of custom rules — navy + saffron IRCTC-inspired theme, frosted cards, animated buttons, realistic seat grid, focus/hover/pressed states, modern inputs
-- **Real Timetable Data (Phase 2)**: 28+ authentic trains from the Delhi–Howrah/Patna corridor (Rajdhani, Poorva, Mahabodhi, Vande Bharat, Duronto, Garib Rath, Humsafar, etc.) with real numbers, names, frequencies (Daily / Tu.W.F.Su etc.) and rich seat maps. Search "New Delhi" → "Howrah" now feels like the real IRCTC experience (times marked TBD until full schedules provided).
+- **Real Timetable Data (Phase 2)**: 65+ authentic trains from official IRCTC-style PDF timetables (Delhi–Eastern India corridor). Source: restructured extractions from 5 detailed PDF timetables (2026 session). Includes Rajdhani, Poorva, Mahabodhi, Vande Bharat, Duronto, Humsafar, Garib Rath, Jan Sadharan, Vibhuti, etc. with real train numbers, classes, days of operation, and full station schedules. The `data/parse_railway_timetables.py` helper + `raw-timetables.json` are provided for future updates.
 - **Payment Gateway (Phase 3)**: Full simulated IRCTC-style payment with Card / UPI / Net Banking / Wallet. Test cards: `4242...` = success, `4000...` = failure. Payment details are stored and shown in My Bookings + beautiful receipt screen.
 - No external DB or server required
 
@@ -48,6 +48,28 @@ mvn javafx:run
 After first successful run, data is created in:
 `~/.railway-reservation/trains.json` and `bookings.json`
 
+## 🔐 Authentication & MySQL (User Passwords)
+
+The app now supports **real username + password login** (replacing the old passwordless user picker).
+
+- Click **👤 Login** in the header → use the "Login or Register" dialog.
+- **Default admin**: `admin` / `admin`
+- New users can self-register (password ≥ 4 characters, stored with BCrypt).
+
+**Optional: Use MySQL instead of embedded H2** for the `users` table (passwords + roles):
+
+1. Create a MySQL database and user.
+2. Set environment variables before launching:
+   ```bash
+   export MYSQL_URL="jdbc:mysql://localhost:3306/railway?useSSL=false&serverTimezone=UTC"
+   export MYSQL_USER="youruser"
+   export MYSQL_PASSWORD="yourpass"
+   ```
+3. Run the app as usual (`mvn javafx:run`).
+4. The `users` table (with hashed passwords) will be created automatically.
+
+Bookings still use the local H2 file DB (for simplicity). Full MySQL for everything is future work.
+
 ## 📦 Build Fat Jar (optional)
 
 ```bash
@@ -62,20 +84,18 @@ RailwayReservationSystem/
 ├── pom.xml
 ├── .gitignore
 ├── README.md
+├── data/
+│   ├── parse_railway_timetables.py   # Heuristic parser for PDF timetable extractions
+│   └── raw-timetables.json           # Source data from 5 official IR PDFs (Delhi-Howrah corridor)
 └── src/main/
     ├── java/com/railwayreservation/
-    │   ├── RailwayApp.java          # Main UI + logic
-    │   ├── model/
-    │   │   ├── Train.java
-    │   │   ├── Booking.java
-    │   │   └── Passenger.java
-    │   ├── service/
-    │   │   └── DataService.java     # JSON + business rules + 8 sample trains
-    │   └── util/
-    │       └── PNRGenerator.java
+    │   ├── RailwayApp.java
+    │   ├── model/ (Train, Booking, Passenger, ScheduleStop, User)
+    │   ├── service/ (DataService, UserRepository, BookingRepository)
+    │   └── util/ (PNRGenerator)
     └── resources/
-        └── styles/
-            └── railway-reservation.css   # HEAVY custom styling
+        ├── data/real-trains.json     # Cleaned 65+ real trains (loaded at runtime)
+        └── styles/railway-reservation.css
 ```
 
 ## 🎨 CSS Highlights
@@ -113,11 +133,11 @@ Fallback to 8 generic samples only if the real JSON is missing.
 
 ## 🔮 Future Enhancements (out of v1 scope)
 
-- Real authentication + BCrypt
-- MySQL persistence (reuse patterns from GlassCalculator)
+- Full MySQL for bookings + trains (currently only users/passwords table uses optional MySQL)
 - FXML + controllers
 - QR code on ticket + PDF export
 - Live availability across users
+- Password reset / admin user management UI
 
 ---
 

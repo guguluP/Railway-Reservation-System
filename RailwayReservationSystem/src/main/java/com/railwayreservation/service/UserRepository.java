@@ -9,9 +9,12 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
+import org.mindrot.jbcrypt.BCrypt;
+
 /**
  * UserRepository supports either MySQL (when env MYSQL_URL is present) or falls back to H2 for dev.
- * Stores users and bookings. Passengers are serialized into a simple pipe-separated format.
+ * Handles user accounts + BCrypt password storage for login authentication.
+ * (Booking methods exist but the main app uses BookingRepository for ticket persistence.)
  */
 public class UserRepository {
 
@@ -71,13 +74,15 @@ public class UserRepository {
             """);
         }
 
-        // Ensure admin exists (demo). In MySQL MERGE isn't available, so use INSERT ... ON DUPLICATE KEY UPDATE
+        // Ensure admin exists (demo). Default credentials: admin / admin  (BCrypt hashed at first run).
+        // Password is BCrypt hashed. ON DUPLICATE keeps existing hash.
         String now = java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ISO_LOCAL_DATE_TIME);
+        String adminHash = BCrypt.hashpw("admin", BCrypt.gensalt(12));
         if (isUsingMySQL()) {
-            String sql = "INSERT INTO users (username, password, role, created_at, last_login_at) VALUES (?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE password = password";
+            String sql = "INSERT INTO users (username, password, role, created_at, last_login_at) VALUES (?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE last_login_at = VALUES(last_login_at)";
             try (PreparedStatement ps = connection.prepareStatement(sql)) {
                 ps.setString(1, "admin");
-                ps.setString(2, "admin");
+                ps.setString(2, adminHash);
                 ps.setString(3, "admin");
                 ps.setString(4, now);
                 ps.setString(5, now);
@@ -88,7 +93,7 @@ public class UserRepository {
                     "MERGE INTO users (username, password, role, created_at, last_login_at) KEY(username) VALUES (?, ?, ?, ?, ?)"
             )) {
                 ps.setString(1, "admin");
-                ps.setString(2, "admin");
+                ps.setString(2, adminHash);
                 ps.setString(3, "admin");
                 ps.setString(4, now);
                 ps.setString(5, now);
@@ -114,11 +119,12 @@ public class UserRepository {
 
     public void createUser(String username, String password, String role) {
         String now = java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ISO_LOCAL_DATE_TIME);
+        String hash = (password == null || password.isEmpty()) ? "" : BCrypt.hashpw(password, BCrypt.gensalt(12));
         if (isUsingMySQL()) {
             String sql = "INSERT INTO users (username, password, role, created_at, last_login_at) VALUES (?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE password = VALUES(password), role = VALUES(role), last_login_at = VALUES(last_login_at)";
             try (PreparedStatement ps = connection.prepareStatement(sql)) {
                 ps.setString(1, username);
-                ps.setString(2, password);
+                ps.setString(2, hash);
                 ps.setString(3, role != null ? role : "user");
                 ps.setString(4, now);
                 ps.setString(5, now);
@@ -130,7 +136,7 @@ public class UserRepository {
             String sql = "MERGE INTO users (username, password, role, created_at, last_login_at) KEY(username) VALUES (?, ?, ?, ?, ?)";
             try (PreparedStatement ps = connection.prepareStatement(sql)) {
                 ps.setString(1, username);
-                ps.setString(2, password);
+                ps.setString(2, hash);
                 ps.setString(3, role != null ? role : "user");
                 ps.setString(4, now);
                 ps.setString(5, now);
@@ -148,8 +154,14 @@ public class UserRepository {
             ps.setString(1, username);
             try (ResultSet rs = ps.executeQuery()) {
                 if (rs.next()) {
-                    String pw = rs.getString("password");
-                    return pw != null && pw.equals(password);
+                    String stored = rs.getString("password");
+                    if (stored == null) return false;
+                    // BCrypt hash check (preferred)
+                    if (stored.startsWith("$2a$") || stored.startsWith("$2b$") || stored.startsWith("$2y$")) {
+                        return BCrypt.checkpw(password, stored);
+                    }
+                    // Legacy plain-text support (will be replaced on next successful register/login)
+                    return stored.equals(password);
                 }
             }
         } catch (SQLException e) {

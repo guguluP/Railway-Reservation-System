@@ -125,7 +125,7 @@ public class RailwayApp extends Application {
         lang.getStyleClass().add("lang-label");
         profileMenu = new MenuButton("👤 " + currentUser);
         profileMenu.getStyleClass().add("profile-menu");
-        MenuItem changeUserItem = new MenuItem("Login");
+        MenuItem changeUserItem = new MenuItem("Login / Register");
         changeUserItem.setOnAction(e -> showUserSelectionDialog());
         MenuItem myBookingsItem = new MenuItem("My Bookings");
         myBookingsItem.setOnAction(e -> { if (tabPane != null) tabPane.getSelectionModel().select(1); });
@@ -142,6 +142,7 @@ public class RailwayApp extends Application {
         MenuItem logoutItem = new MenuItem("Logout");
         logoutItem.setOnAction(e -> {
             currentUser = "Guest";
+            currentUserRole = "user";
             profileMenu.setText("👤 " + currentUser);
             refreshBookingsView();
         });
@@ -160,56 +161,131 @@ public class RailwayApp extends Application {
     }
 
     private void showUserSelectionDialog() {
-        Dialog<String> dialog = new Dialog<>();
-        dialog.setTitle("Select or Register User");
-        dialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
+        Dialog<Boolean> dialog = new Dialog<>();
+        dialog.setTitle("Login or Register");
+        dialog.getDialogPane().getButtonTypes().addAll(ButtonType.CANCEL);
 
-        VBox content = new VBox(12);
-        content.setPadding(new Insets(16));
+        VBox content = new VBox(14);
+        content.setPadding(new Insets(18));
+        content.setPrefWidth(380);
 
-        Label existingLbl = new Label("Existing users:");
-        ComboBox<String> usersCombo = new ComboBox<>();
-        List<String> allUsers = dataService.getAllUsernames();
-        if (allUsers.isEmpty()) allUsers.add("Guest");
-        usersCombo.getItems().addAll(allUsers);
-        usersCombo.setValue(currentUser);
+        // --- Login section ---
+        Label loginTitle = new Label("Login");
+        loginTitle.getStyleClass().add("irctc-section-title");
+        loginTitle.setStyle("-fx-font-size:14px; -fx-font-weight:bold;");
 
-        Label newLbl = new Label("Register new user:");
-        TextField newUserField = new TextField();
-        newUserField.setPromptText("New username");
+        ComboBox<String> userCombo = new ComboBox<>();
+        List<String> users = dataService.getAllUsernames();
+        if (users.isEmpty()) users.add("admin");
+        userCombo.getItems().addAll(users);
+        userCombo.setEditable(true);
+        userCombo.setValue(currentUser.equals("Guest") ? "admin" : currentUser);
+        userCombo.setPrefWidth(220);
 
-        content.getChildren().addAll(existingLbl, usersCombo, newLbl, newUserField);
+        PasswordField loginPw = new PasswordField();
+        loginPw.setPromptText("Password");
+        loginPw.setPrefWidth(220);
+
+        Button loginBtn = new Button("Login");
+        loginBtn.getStyleClass().add("primary-button");
+        Label loginStatus = new Label();
+        loginStatus.setStyle("-fx-text-fill:#c00; -fx-font-size:11px;");
+
+        HBox loginRow = new HBox(8, userCombo, loginPw, loginBtn);
+        loginRow.setAlignment(Pos.CENTER_LEFT);
+
+        VBox loginBox = new VBox(6, loginTitle, loginRow, loginStatus);
+
+        // --- Register section ---
+        Label regTitle = new Label("Create New Account");
+        regTitle.getStyleClass().add("irctc-section-title");
+        regTitle.setStyle("-fx-font-size:14px; -fx-font-weight:bold;");
+
+        TextField regUser = new TextField();
+        regUser.setPromptText("Choose username");
+        regUser.setPrefWidth(220);
+
+        PasswordField regPw = new PasswordField();
+        regPw.setPromptText("Password (min 4 chars)");
+        regPw.setPrefWidth(220);
+
+        PasswordField regPw2 = new PasswordField();
+        regPw2.setPromptText("Confirm password");
+        regPw2.setPrefWidth(220);
+
+        Button regBtn = new Button("Register & Login");
+        regBtn.getStyleClass().add("primary-button");
+        Label regStatus = new Label();
+        regStatus.setStyle("-fx-text-fill:#c00; -fx-font-size:11px;");
+
+        VBox regBox = new VBox(6, regTitle,
+                new HBox(8, regUser, regPw, regPw2, regBtn),
+                regStatus);
+
+        content.getChildren().addAll(loginBox, new Separator(), regBox);
         dialog.getDialogPane().setContent(content);
 
-        dialog.setResultConverter(btn -> {
-            if (btn == ButtonType.OK) {
-                String newName = newUserField.getText();
-                if (newName != null && !newName.trim().isEmpty()) {
-                    return newName.trim();
-                }
-                return usersCombo.getValue();
+        // Login action
+        loginBtn.setOnAction(e -> {
+            String u = userCombo.getValue();
+            String p = loginPw.getText();
+            if (u == null || u.isBlank() || p == null || p.isBlank()) {
+                loginStatus.setText("Enter username and password");
+                return;
             }
-            return null;
+            boolean ok = userRepository.authenticate(u.trim(), p);
+            if (ok) {
+                String name = u.trim();
+                currentUser = name;
+                currentUserRole = userRepository.getRole(name);
+                if (profileMenu != null) {
+                    profileMenu.setText("👤 " + currentUser + ("admin".equals(currentUserRole) ? " (admin)" : ""));
+                }
+                userRepository.updateLastLogin(name);
+                refreshBookingsView();
+                dialog.setResult(true);
+                dialog.close();
+            } else {
+                loginStatus.setText("Invalid credentials");
+            }
         });
 
-        java.util.Optional<String> result = dialog.showAndWait();
-        result.ifPresent(name -> {
-            if (name == null || name.trim().isEmpty()) return;
-            String finalName = name.trim();
-            dataService.registerOrUpdateUser(finalName);
-            currentUser = finalName;
-            currentUserRole = "user";
-            try {
-                if (userRepository.userExists("admin") && finalName.equalsIgnoreCase("admin")) {
-                    currentUserRole = "admin";
-                }
-            } catch (Exception ignored) {}
-            if (profileMenu != null) {
-                profileMenu.setText("👤 " + currentUser + ("admin".equals(currentUserRole) ? " (admin)" : ""));
+        // Register action
+        regBtn.setOnAction(e -> {
+            String u = regUser.getText();
+            String p1 = regPw.getText();
+            String p2 = regPw2.getText();
+            if (u == null || u.trim().isEmpty() || p1 == null || p1.length() < 4) {
+                regStatus.setText("Username + password (≥4 chars) required");
+                return;
             }
-            dataService.updateUserLogin(currentUser);
+            if (!p1.equals(p2)) {
+                regStatus.setText("Passwords do not match");
+                return;
+            }
+            String name = u.trim();
+            if (userRepository.userExists(name)) {
+                regStatus.setText("Username already taken");
+                return;
+            }
+            userRepository.createUser(name, p1, "user");
+            // auto-login after register
+            currentUser = name;
+            currentUserRole = "user";
+            if (profileMenu != null) {
+                profileMenu.setText("👤 " + currentUser);
+            }
+            userRepository.updateLastLogin(name);
             refreshBookingsView();
+            dialog.setResult(true);
+            dialog.close();
         });
+
+        // Allow Enter key on password fields to trigger login
+        loginPw.setOnAction(e -> loginBtn.fire());
+        regPw2.setOnAction(e -> regBtn.fire());
+
+        dialog.showAndWait();
     }
 
     private Node buildMainContent() {
