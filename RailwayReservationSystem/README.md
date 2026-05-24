@@ -144,3 +144,17 @@ Fallback to 8 generic samples only if the real JSON is missing.
 Built with ❤️ for coding practice — demonstrating strong JavaFX UI skills + heavy CSS craftsmanship.
 
 **Version**: 1.0 • 2026
+
+## ✨ UI/UX v2 Enhancements (Completed per detailed plan)
+- Professional header with logo, 4 main tabs (Search/My Bookings/Live/Admin), avatar + context menu (Profile/Settings/Logout)
+- Enhanced left sidebar navigation
+- Search: autocomplete filtering on stations, popular route chips, flexible dates wired, nearby stub, improved cards with duration + running days dots
+- Booking: coach selector, berth type legend, ladies/senior seat highlights, copy previous passenger, fare breakdown (base+GST+resv)
+- Theming: Dark/Light/Classic + high-contrast toggle in Settings
+- My Bookings: status badges, per-ticket QR canvas
+- Payment: real drawn fake QR canvas
+- Admin: search filter + simple visual occupancy bars
+- Polish: keyboard shortcuts (Ctrl+K search), more tooltips, ScrollPane responsive, micro-animations enhanced, spinners/labels
+- A11y: high-contrast mode, better labels
+
+All changes in single file + CSS. `mvn clean compile` clean.

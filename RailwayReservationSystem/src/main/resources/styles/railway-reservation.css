@@ -220,6 +220,23 @@
     -fx-opacity: 0.65;
     -fx-cursor: default;
 }
+.seat-ladies {
+    -fx-background-color: #ec4899 !important;
+}
+.seat-senior {
+    -fx-background-color: #eab308 !important;
+}
+
+/* Phase 7: A11y focus indicators */
+.button:focused, .combo-box:focused, .text-field:focused, .toggle-button:focused, .list-cell:focused {
+    -fx-border-color: #ff9933;
+    -fx-border-width: 2px;
+    -fx-border-style: solid;
+}
+.high-contrast .button:focused {
+    -fx-border-color: #ffff00;
+    -fx-border-width: 3px;
+}
 
 /* Class toggles */
 .class-toggle {
@@ -793,4 +810,80 @@
     -fx-text-fill: #ff6b00;
     -fx-font-size: 12px;
     -fx-padding: 4 0 0 8;
+}
+
+/* Phase 1-2 additions: nav tabs, chips, live */
+.nav-tab {
+    -fx-background-color: transparent;
+    -fx-text-fill: #cce0ff;
+    -fx-padding: 6 14;
+    -fx-font-size: 13px;
+    -fx-cursor: hand;
+    -fx-background-radius: 6;
+}
+.nav-tab:hover {
+    -fx-text-fill: white;
+    -fx-background-color: rgba(255,255,255,0.1);
+}
+.nav-tab-active {
+    -fx-text-fill: white;
+    -fx-font-weight: bold;
+    -fx-background-color: #0066b3;
+    -fx-border-color: #ff9933;
+    -fx-border-width: 0 0 2 0;
+}
+.route-chip {
+    -fx-background-color: #e8f4fc;
+    -fx-text-fill: #0066b3;
+    -fx-padding: 4 10;
+    -fx-background-radius: 999;
+    -fx-font-size: 11px;
+    -fx-cursor: hand;
+    -fx-border-color: #a0d2f0;
+    -fx-border-radius: 999;
+}
+.route-chip:hover {
+    -fx-background-color: #0066b3;
+    -fx-text-fill: white;
+}
+.live-container {
+    -fx-background-color: #112240;
+    -fx-padding: 16;
+    -fx-background-radius: 10;
+}
+
+/* Phase 4: Theme support */
+.theme-light {
+    -fx-background-color: #f8f9fa;
+}
+.theme-classic {
+    -fx-background-color: #e8f0f8;
+}
+.high-contrast .irctc-header,
+.high-contrast .sidebar {
+    -fx-background-color: #000000;
+}
+.high-contrast .primary-button {
+    -fx-background-color: #ffcc00;
+    -fx-text-fill: #000000;
+}
+.high-contrast .train-card {
+    -fx-border-color: #ffffff;
+    -fx-border-width: 2;
+}
+
+/* Enhanced micro-animations and glass */
+.button:pressed {
+    -fx-scale-x: 0.95;
+    -fx-scale-y: 0.95;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.4), 4, 0.2, 0, 1);
+}
+.train-card:hover {
+    -fx-translate-y: -2;
+    -fx-effect: dropshadow(gaussian, rgba(255,153,51,0.4), 20, 0.4, 0, 8);
+}
+.seat-available:hover {
+    -fx-scale-x: 1.2;
+    -fx-scale-y: 1.2;
+    -fx-transition: all 0.1s;
 }

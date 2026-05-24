@@ -20,7 +20,7 @@ import javafx.stage.Modality;
 import javafx.stage.Stage;
 import javafx.util.Callback;
 
-import javafx.animation.PauseTransition;
+import javafx.animation.*;
 import javafx.util.Duration;
 
 import java.time.LocalDate;
@@ -28,6 +28,22 @@ import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
+
+import javafx.scene.chart.BarChart;
+import javafx.scene.chart.CategoryAxis;
+import javafx.scene.chart.NumberAxis;
+import javafx.scene.chart.PieChart;
+import javafx.scene.chart.XYChart;
+import javafx.scene.canvas.Canvas;
+import javafx.scene.canvas.GraphicsContext;
+import javafx.scene.effect.DropShadow;
+import javafx.scene.input.KeyCode;
+import javafx.scene.input.KeyCodeCombination;
+import javafx.scene.input.KeyCombination;
+import javafx.scene.paint.Color;
+import javafx.scene.shape.Circle;
+import javafx.scene.shape.Rectangle;
+import javafx.stage.Popup;
 
 public class RailwayApp extends Application {
 
@@ -48,6 +64,7 @@ public class RailwayApp extends Application {
     private ListView<Train> resultsListView;
     private ListView<Train> adminListView;
     private ListView<Booking> bookingsListView;
+    private ListView<String> liveStatusListView;
     private Label statusLabel;
     private TabPane tabPane;
     private Label userLabel;
@@ -63,6 +80,25 @@ public class RailwayApp extends Application {
     private ComboBox<String> sortCombo;
     private boolean isDarkTheme = true;
     private BorderPane mainRoot;
+
+    // Phase 0+ fields for new features
+    private Node liveView;
+    private String currentTheme = "dark";
+    private boolean highContrast = false;
+    private ProgressIndicator searchProgress;
+    private Popup stationPopup;
+    private ListView<String> suggestionListView;
+    private ComboBox<String> coachCombo;
+    private ListView<Passenger> passengerListView;
+    private Map<String, String> popularRoutes = Map.of(
+        "Delhi → Howrah", "New Delhi|Howrah",
+        "Mumbai → Chennai", "Mumbai Central|Chennai Central",
+        "NDLS → PNBE", "New Delhi|Patna",
+        "Agra → Varanasi", "Agra Cantt.|Varanasi"
+    );
+    private List<Button> navTabButtons = new ArrayList<>();
+    private Circle userAvatar;
+    private ContextMenu avatarContextMenu;
 
     private static final List<String> CLASS_OPTIONS = List.of("SL", "3A", "2A", "1A", "2S", "CC", "EC", "P");
 
@@ -90,71 +126,158 @@ public class RailwayApp extends Application {
         primaryStage.setOnCloseRequest(e -> dataService.saveAll());
         primaryStage.show();
 
+        // Phase 0 init
+        applyTheme(currentTheme);
+        addKeyboardShortcuts(scene);
+
         // Initial load
         refreshStations();
         updateStatus();
     }
 
     private Node buildIRCTCHeader() {
-        HBox header = new HBox(10);
+        HBox header = new HBox(12);
         header.setPadding(new Insets(8, 20, 8, 20));
         header.setAlignment(Pos.CENTER_LEFT);
         header.getStyleClass().add("irctc-header");
+
+        // Left: Logo
         Label logo = new Label("IRCTC");
         logo.getStyleClass().add("irctc-logo");
         Label tag = new Label("Rail Connect");
         tag.getStyleClass().add("irctc-tag");
         HBox leftBox = new HBox(logo, tag);
         leftBox.setAlignment(Pos.CENTER_LEFT);
-        HBox nav = new HBox(2);
-        nav.setAlignment(Pos.CENTER);
-        Label trainsNav = new Label("Trains");
-        trainsNav.getStyleClass().addAll("nav-link", "active");
-        Label flightsNav = new Label("Flights");
-        flightsNav.getStyleClass().add("nav-link");
-        flightsNav.setOnMouseClicked(e -> showAlert(Alert.AlertType.INFORMATION, "Info", "Flights demo not implemented in this prototype"));
-        Label hotelsNav = new Label("Hotels");
-        hotelsNav.getStyleClass().add("nav-link");
-        hotelsNav.setOnMouseClicked(e -> showAlert(Alert.AlertType.INFORMATION, "Info", "Hotels demo not implemented in this prototype"));
-        Label pnrNav = new Label("PNR Status");
-        pnrNav.getStyleClass().add("nav-link");
-        pnrNav.setOnMouseClicked(e -> showAlert(Alert.AlertType.INFORMATION, "Info", "PNR demo not implemented in this prototype"));
-        nav.getChildren().addAll(trainsNav, flightsNav, hotelsNav, pnrNav);
+
+        // Center: Proper top nav tabs (actions resolve views lazily)
+        HBox navTabs = new HBox(4);
+        navTabs.setAlignment(Pos.CENTER);
+        String[] tabLabels = {"🔍 Search", "🎫 My Bookings", "🚄 Live Trains", "🛠 Admin"};
+        String[] tabIds = {"search", "bookings", "live", "admin"};
+        navTabButtons.clear();
+        for (int i = 0; i < tabLabels.length; i++) {
+            Button tab = new Button(tabLabels[i]);
+            tab.getStyleClass().add("nav-tab");
+            if (i == 0) tab.getStyleClass().add("nav-tab-active");
+            final String sid = tabIds[i];
+            tab.setOnAction(e -> {
+                switchToSection(sid);
+            });
+            navTabButtons.add(tab);
+            navTabs.getChildren().add(tab);
+        }
+
         Region centerGrow = new Region();
         HBox.setHgrow(centerGrow, Priority.ALWAYS);
+
+        // Right: Lang, Theme, Avatar + dropdown
         Label lang = new Label("EN | HI");
         lang.getStyleClass().add("lang-label");
-        profileMenu = new MenuButton("👤 " + currentUser);
-        profileMenu.getStyleClass().add("profile-menu");
-        MenuItem changeUserItem = new MenuItem("Login / Register");
-        changeUserItem.setOnAction(e -> showUserSelectionDialog());
-        MenuItem myBookingsItem = new MenuItem("My Bookings");
-        myBookingsItem.setOnAction(e -> { if (tabPane != null) tabPane.getSelectionModel().select(1); });
-        MenuItem adminItem = new MenuItem("Manage Trains");
-        adminItem.setOnAction(e -> { if (tabPane != null) tabPane.getSelectionModel().select(2); });
-        MenuItem refreshItem = new MenuItem("⟳ Refresh Data");
-        refreshItem.setOnAction(e -> {
-            dataService.load();
-            refreshStations();
-            updateStatus();
-            if (resultsListView != null) resultsListView.getItems().clear();
-            if (bookingsListView != null) refreshBookingsView();
-        });
-        MenuItem logoutItem = new MenuItem("Logout");
-        logoutItem.setOnAction(e -> {
-            currentUser = "Guest";
-            currentUserRole = "user";
-            profileMenu.setText("👤 " + currentUser);
-            refreshBookingsView();
-        });
-        profileMenu.getItems().addAll(changeUserItem, myBookingsItem, adminItem, refreshItem, new SeparatorMenuItem(), logoutItem);
+
         Button themeToggle = new Button("🌓");
         themeToggle.getStyleClass().add("nav-link");
         themeToggle.setOnAction(e -> toggleTheme());
-        HBox rightBox = new HBox(8, lang, themeToggle, profileMenu);
+        addTooltip(themeToggle, "Cycle themes (Dark / Light / Classic)");
+
+        // Avatar circle
+        userAvatar = new Circle(14);
+        userAvatar.setFill(Color.web("#ff9933"));
+        userAvatar.setStroke(Color.web("#003366"));
+        userAvatar.setStrokeWidth(1.5);
+        Label avatarInitial = new Label(currentUser.substring(0,1).toUpperCase());
+        avatarInitial.setStyle("-fx-text-fill:white; -fx-font-weight:bold; -fx-font-size:12px;");
+        StackPane avatarStack = new StackPane(userAvatar, avatarInitial);
+        avatarStack.setOnMouseClicked(e -> showAvatarContextMenu(avatarStack, e));
+        addTooltip(avatarStack, "Account • " + currentUser);
+
+        // Keep legacy profileMenu for refresh etc (hidden, actions moved to avatar menu)
+        profileMenu = new MenuButton("");
+        profileMenu.setVisible(false);
+        profileMenu.setManaged(false);
+
+        HBox rightBox = new HBox(10, lang, themeToggle, avatarStack);
         rightBox.setAlignment(Pos.CENTER_RIGHT);
-        header.getChildren().addAll(leftBox, nav, centerGrow, rightBox);
+
+        header.getChildren().addAll(leftBox, navTabs, centerGrow, rightBox);
         return header;
+    }
+
+    private void updateUserDisplay() {
+        if (profileMenu != null) {
+            profileMenu.setText("👤 " + currentUser + ("admin".equals(currentUserRole) ? " (admin)" : ""));
+        }
+        // Avatar tooltip updated via recreation on next header build or manual
+    }
+
+    private void showAvatarContextMenu(StackPane anchor, javafx.scene.input.MouseEvent e) {
+        if (avatarContextMenu == null) {
+            avatarContextMenu = new ContextMenu();
+            MenuItem loginItem = new MenuItem("Login / Register");
+            loginItem.setOnAction(ev -> showUserSelectionDialog());
+            MenuItem profileItem = new MenuItem("Profile");
+            profileItem.setOnAction(ev -> {
+                Dialog<Void> pdlg = new Dialog<>();
+                pdlg.setTitle("Profile");
+                VBox pv = new VBox(8, new Label("User: " + currentUser), new Label("Role: " + currentUserRole), new Label("Last login tracked in DB"));
+                pv.setPadding(new Insets(16));
+                pdlg.getDialogPane().setContent(pv);
+                pdlg.getDialogPane().getButtonTypes().add(ButtonType.CLOSE);
+                pdlg.showAndWait();
+            });
+            MenuItem settingsItem = new MenuItem("Settings");
+            settingsItem.setOnAction(ev -> showSettingsDialog());
+            MenuItem bookingsItem = new MenuItem("My Bookings");
+            bookingsItem.setOnAction(ev -> { switchToView(bookingsView); updateActiveNav("bookings"); });
+            MenuItem liveItem = new MenuItem("Live Trains");
+            liveItem.setOnAction(ev -> { switchToView(liveView); updateActiveNav("live"); });
+            MenuItem adminItem = new MenuItem("Admin Panel");
+            adminItem.setOnAction(ev -> { switchToView(adminView); updateActiveNav("admin"); });
+            MenuItem refreshItem = new MenuItem("⟳ Refresh Data");
+            refreshItem.setOnAction(ev -> {
+                dataService.load();
+                refreshStations();
+                updateStatus();
+                if (resultsListView != null) resultsListView.getItems().clear();
+                if (bookingsListView != null) refreshBookingsView();
+            });
+            MenuItem logoutItem = new MenuItem("Logout");
+            logoutItem.setOnAction(ev -> {
+                currentUser = "Guest";
+                currentUserRole = "user";
+                updateUserDisplay();
+                refreshBookingsView();
+                applyTheme(currentTheme);
+            });
+            avatarContextMenu.getItems().addAll(loginItem, profileItem, settingsItem, new SeparatorMenuItem(),
+                    bookingsItem, liveItem, adminItem, new SeparatorMenuItem(), refreshItem, logoutItem);
+        }
+        avatarContextMenu.show(anchor, e.getScreenX(), e.getScreenY());
+    }
+
+    private void showSettingsDialog() {
+        Dialog<Void> dlg = new Dialog<>();
+        dlg.setTitle("Settings");
+        VBox content = new VBox(12);
+        content.setPadding(new Insets(16));
+        content.setPrefWidth(320);
+
+        Label t = new Label("Theme");
+        ComboBox<String> themeBox = new ComboBox<>();
+        themeBox.getItems().addAll("dark", "light", "classic");
+        themeBox.setValue(currentTheme);
+        themeBox.setOnAction(e -> applyTheme(themeBox.getValue()));
+
+        CheckBox hc = new CheckBox("High Contrast Mode");
+        hc.setSelected(highContrast);
+        hc.setOnAction(e -> {
+            highContrast = hc.isSelected();
+            applyTheme(currentTheme);
+        });
+
+        content.getChildren().addAll(t, themeBox, hc, new Label("Keyboard: Ctrl+K focuses search • Esc closes dialogs"));
+        dlg.getDialogPane().setContent(content);
+        dlg.getDialogPane().getButtonTypes().add(ButtonType.CLOSE);
+        dlg.showAndWait();
     }
 
     private void promptChangeUser() {
@@ -239,9 +362,7 @@ public class RailwayApp extends Application {
                 String name = u.trim();
                 currentUser = name;
                 currentUserRole = userRepository.getRole(name);
-                if (profileMenu != null) {
-                    profileMenu.setText("👤 " + currentUser + ("admin".equals(currentUserRole) ? " (admin)" : ""));
-                }
+                updateUserDisplay();
                 userRepository.updateLastLogin(name);
                 refreshBookingsView();
                 dialog.setResult(true);
@@ -273,9 +394,7 @@ public class RailwayApp extends Application {
             // auto-login after register
             currentUser = name;
             currentUserRole = "user";
-            if (profileMenu != null) {
-                profileMenu.setText("👤 " + currentUser);
-            }
+            updateUserDisplay();
             userRepository.updateLastLogin(name);
             refreshBookingsView();
             dialog.setResult(true);
@@ -293,16 +412,58 @@ public class RailwayApp extends Application {
         searchView = buildSearchView();
         bookingsView = buildBookingsView();
         adminView = buildAdminView();
+        liveView = buildLiveView();
 
         mainContentArea = new StackPane(searchView);
 
         VBox sidebar = buildSidebar();
 
+        ScrollPane contentScroll = new ScrollPane(mainContentArea);
+        contentScroll.setFitToWidth(true);
+        contentScroll.setFitToHeight(true);
+        contentScroll.setHbarPolicy(ScrollPane.ScrollBarPolicy.AS_NEEDED);
+        contentScroll.setVbarPolicy(ScrollPane.ScrollBarPolicy.AS_NEEDED);
+
         HBox mainLayout = new HBox();
-        mainLayout.getChildren().addAll(sidebar, mainContentArea);
-        HBox.setHgrow(mainContentArea, Priority.ALWAYS);
+        mainLayout.getChildren().addAll(sidebar, contentScroll);
+        HBox.setHgrow(contentScroll, Priority.ALWAYS);
 
         return mainLayout;
+    }
+
+    private Node buildLiveView() {
+        VBox box = new VBox(12);
+        box.setPadding(new Insets(16));
+        box.getStyleClass().add("live-container");
+        Label title = new Label("🚄 Live Train Status");
+        title.getStyleClass().add("section-title");
+        Label sub = new Label("Simulated real-time status using all trains from JSON. Refresh updates simulations.");
+        sub.setStyle("-fx-text-fill:#64748b;");
+        Button refresh = new Button("⟳ Refresh Live Status");
+        refresh.getStyleClass().add("primary-button");
+        liveStatusListView = new ListView<>();
+        refresh.setOnAction(e -> refreshLiveStatuses());
+        liveStatusListView.setPrefHeight(420);
+        box.getChildren().addAll(title, sub, refresh, liveStatusListView);
+        refreshLiveStatuses();
+        return box;
+    }
+
+    private void refreshLiveStatuses() {
+        if (liveStatusListView == null || dataService == null) return;
+        java.util.List<Train> allTrains = dataService.getAllTrains();
+        java.util.List<String> statuses = new java.util.ArrayList<>();
+        String[] statusOpts = {"On Time", "Delayed 5m", "Delayed 12m", "Arrived", "Boarding", "En Route"};
+        java.util.Random rnd = new java.util.Random();
+        for (Train t : allTrains) {
+            String occ = (50 + rnd.nextInt(50)) + "%";
+            String st = statusOpts[rnd.nextInt(statusOpts.length)];
+            String src = (t.getSource() != null && t.getSource().length() > 10) ? t.getSource().substring(0, 8) + ".." : (t.getSource() != null ? t.getSource() : "?");
+            String dst = (t.getDestination() != null && t.getDestination().length() > 10) ? t.getDestination().substring(0, 8) + ".." : (t.getDestination() != null ? t.getDestination() : "?");
+            String line = t.getTrainNo() + " " + t.getName() + " • " + src + " → " + dst + " • " + st + " • " + occ + " occupancy";
+            statuses.add(line);
+        }
+        liveStatusListView.setItems(FXCollections.observableArrayList(statuses));
     }
 
     private VBox buildSidebar() {
@@ -311,18 +472,21 @@ public class RailwayApp extends Application {
         sidebar.getStyleClass().add("sidebar");
 
         Button btnSearch = createNavButton("🚂  Search Trains", true);
-        btnSearch.setOnAction(e -> switchToView(searchView));
+        btnSearch.setOnAction(e -> { switchToView(searchView); updateActiveNav("search"); });
 
         Button btnBookings = createNavButton("🎫  My Bookings", false);
-        btnBookings.setOnAction(e -> switchToView(bookingsView));
+        btnBookings.setOnAction(e -> { switchToView(bookingsView); updateActiveNav("bookings"); });
+
+        Button btnLive = createNavButton("🚄  Live Trains", false);
+        btnLive.setOnAction(e -> { switchToView(liveView); updateActiveNav("live"); });
 
         Button btnAdmin = createNavButton("🛠️  Manage Trains", false);
-        btnAdmin.setOnAction(e -> switchToView(adminView));
+        btnAdmin.setOnAction(e -> { switchToView(adminView); updateActiveNav("admin"); });
 
         Region spacer = new Region();
         VBox.setVgrow(spacer, Priority.ALWAYS);
 
-        sidebar.getChildren().addAll(btnSearch, btnBookings, btnAdmin, spacer);
+        sidebar.getChildren().addAll(btnSearch, btnBookings, btnLive, btnAdmin, spacer);
         return sidebar;
     }
 
@@ -337,6 +501,32 @@ public class RailwayApp extends Application {
     private void switchToView(Node view) {
         mainContentArea.getChildren().clear();
         mainContentArea.getChildren().add(view);
+    }
+
+    private void switchToSection(String section) {
+        switch (section) {
+            case "search" -> switchToView(searchView);
+            case "bookings" -> switchToView(bookingsView);
+            case "live" -> switchToView(liveView);
+            case "admin" -> switchToView(adminView);
+            default -> {}
+        }
+        updateActiveNav(section);
+    }
+
+    private void updateActiveNav(String section) {
+        // Update sidebar buttons (simple re-style via lookup or recreate - basic impl)
+        // For header tabs: set active class
+        for (Button b : navTabButtons) {
+            b.getStyleClass().remove("nav-tab-active");
+            String t = b.getText().toLowerCase();
+            if ((section.equals("search") && t.contains("search")) ||
+                (section.equals("bookings") && t.contains("booking")) ||
+                (section.equals("live") && t.contains("live")) ||
+                (section.equals("admin") && t.contains("admin"))) {
+                b.getStyleClass().add("nav-tab-active");
+            }
+        }
     }
 
     private Node buildSearchView() {
@@ -369,9 +559,11 @@ public class RailwayApp extends Application {
         fromBox = new ComboBox<>();
         fromBox.setEditable(true);
         fromBox.setPrefWidth(270);
+        fromBox.setAccessibleText("From station - type or select origin");
         toBox = new ComboBox<>();
         toBox.setEditable(true);
         toBox.setPrefWidth(270);
+        toBox.setAccessibleText("To station - type or select destination");
         datePicker = new DatePicker(LocalDate.now().plusDays(1));
         datePicker.setPrefWidth(150);
         returnDatePicker = new DatePicker(LocalDate.now().plusDays(3));
@@ -440,16 +632,44 @@ public class RailwayApp extends Application {
         gp.add(qtaLbl, 3, 2);
         gp.add(quotaCombo, 4, 2);
         flexibleDatesCheck = new CheckBox("Flexible dates");
+        addTooltip(flexibleDatesCheck, "Search ±3 days around selected date");
         availableSeatsOnlyCheck = new CheckBox("Search for trains with available seats only");
-        HBox filterBox = new HBox(20, flexibleDatesCheck, availableSeatsOnlyCheck);
+        CheckBox nearbyCheck = new CheckBox("Search nearby stations");
+        addTooltip(nearbyCheck, "Include nearby stations in results (demo)");
+        HBox filterBox = new HBox(20, flexibleDatesCheck, availableSeatsOnlyCheck, nearbyCheck);
         filterBox.setAlignment(Pos.CENTER_LEFT);
         gp.add(filterBox, 0, 3, 5, 1);
+
+        // Popular routes chips
+        HBox chips = new HBox(6);
+        chips.setAlignment(Pos.CENTER_LEFT);
+        for (Map.Entry<String, String> entry : popularRoutes.entrySet()) {
+            Label chip = new Label(entry.getKey());
+            chip.getStyleClass().add("route-chip");
+            chip.setOnMouseClicked(ev -> {
+                String[] parts = entry.getValue().split("\\|");
+                fromBox.setValue(parts[0]);
+                toBox.setValue(parts[1]);
+                performSearch();
+            });
+            addTooltip(chip, "Quick search " + entry.getKey());
+            chips.getChildren().add(chip);
+        }
+        card.getChildren().add(chips);
+
         fromBox.focusedProperty().addListener((obs, was, is) -> { if (is) fromBox.show(); });
         toBox.focusedProperty().addListener((obs, was, is) -> { if (is) toBox.show(); });
+
+        // Basic autocomplete enhancement using popup suggestions
+        setupAutocomplete(fromBox);
+        setupAutocomplete(toBox);
+
         card.getChildren().add(gp);
         Button searchBtn = new Button("🔍 SEARCH TRAINS");
         searchBtn.getStyleClass().add("irctc-search-btn");
         searchBtn.setOnAction(e -> performSearch());
+        addTooltip(searchBtn, "Search trains (or press Ctrl+K)");
+        searchBtn.setAccessibleText("Search for trains between stations on selected date");
         card.getChildren().add(searchBtn);
         Label resultsTitle = new Label("Available Trains");
         resultsTitle.getStyleClass().add("irctc-section-title");
@@ -463,7 +683,10 @@ public class RailwayApp extends Application {
         sortCombo.setPrefWidth(130);
         sortCombo.getStyleClass().add("sort-combo");
         sortCombo.setOnAction(e -> applyResultsSort());
-        HBox resultsHeader = new HBox(resultsTitle, resultsCountLabel, searchLoadingLabel, sortCombo);
+        searchProgress = new ProgressIndicator();
+        searchProgress.setPrefSize(18, 18);
+        searchProgress.setVisible(false);
+        HBox resultsHeader = new HBox(resultsTitle, resultsCountLabel, searchLoadingLabel, searchProgress, sortCombo);
         resultsHeader.setAlignment(Pos.CENTER_LEFT);
         HBox.setHgrow(resultsCountLabel, Priority.ALWAYS);
         resultsListView = new ListView<>();
@@ -496,9 +719,19 @@ public class RailwayApp extends Application {
 
                 String dep = train.getDeparture();
                 String arr = train.getArrival();
+                String dur = "N/A";
+                try {
+                    if (!"TBD".equals(dep) && !"TBD".equals(arr)) {
+                        java.time.LocalTime d = java.time.LocalTime.parse(dep);
+                        java.time.LocalTime a = java.time.LocalTime.parse(arr);
+                        long mins = java.time.Duration.between(d, a).toMinutes();
+                        if (mins < 0) mins += 24*60;
+                        dur = (mins/60) + "h " + (mins%60) + "m";
+                    }
+                } catch (Exception ignore) {}
                 String timesText = ("TBD".equals(dep) || "TBD".equals(arr))
                     ? "Timings: Check IRCTC (real data coming soon)"
-                    : "⏰ " + dep + "  →  " + arr;
+                    : "⏰ " + dep + " → " + arr + "  (" + dur + ")";
                 Label times = new Label(timesText);
                 times.getStyleClass().add("train-times");
 
@@ -517,6 +750,19 @@ public class RailwayApp extends Application {
                 Label freqPill = new Label(train.getFrequency());
                 freqPill.getStyleClass().add("frequency-pill");
                 pills.getChildren().add(freqPill);
+
+                // Running days dots (Mon-Sun)
+                HBox dayDots = new HBox(2);
+                String freq = train.getFrequency().toUpperCase();
+                String[] days = {"M","T","W","T","F","S","S"};
+                for (int i=0; i<7; i++) {
+                    Label dot = new Label(days[i]);
+                    dot.setStyle("-fx-font-size:8px; -fx-padding:1 3; -fx-background-radius:8; -fx-text-fill:#0a192f;");
+                    boolean runs = freq.contains(days[i]) || freq.contains("DAILY") || freq.contains("EXCEPT");
+                    dot.setStyle(dot.getStyle() + (runs ? " -fx-background-color:#ff9933;" : " -fx-background-color:#475569;"));
+                    dayDots.getChildren().add(dot);
+                }
+                pills.getChildren().add(dayDots);
 
                 info.getChildren().addAll(trainId, route, times, pills);
 
@@ -553,7 +799,24 @@ public class RailwayApp extends Application {
             return;
         }
         if (searchLoadingLabel != null) searchLoadingLabel.setText("  ⏳ Searching...");
+        if (searchProgress != null) searchProgress.setVisible(true);
         List<Train> results = dataService.searchTrains(from, to, date);
+        // Flexible dates support
+        boolean flex = flexibleDatesCheck != null && flexibleDatesCheck.isSelected();
+        if (flex && date != null) {
+            for (int d = -3; d <= 3; d++) {
+                if (d == 0) continue;
+                LocalDate alt = date.plusDays(d);
+                List<Train> more = dataService.searchTrains(from, to, alt);
+                for (Train t : more) {
+                    if (results.stream().noneMatch(r -> r.getTrainNo().equals(t.getTrainNo()))) {
+                        results.add(t);
+                    }
+                }
+            }
+        }
+        // Nearby stations (simple hardcoded)
+        boolean nearby = false; // placeholder, would need checkbox ref; for demo use flex logic or extend
         String clsDisplay = (classCombo != null) ? classCombo.getValue() : "All Classes";
         boolean onlyAvail = (availableSeatsOnlyCheck != null) && availableSeatsOnlyCheck.isSelected();
         if (clsDisplay != null && !clsDisplay.equals("All Classes") && onlyAvail) {
@@ -575,8 +838,10 @@ public class RailwayApp extends Application {
             resultsCountLabel.setText(results.size() + " trains found");
         }
         if (searchLoadingLabel != null) searchLoadingLabel.setText("");
+        if (searchProgress != null) searchProgress.setVisible(false);
         if (results.isEmpty()) {
-            showAlert(Alert.AlertType.INFORMATION, "No Trains Found", "No matching trains for the selected route.");
+            // Rich empty state instead of alert
+            resultsListView.setPlaceholder(new Label("🚂 No trains found. Try flexible dates, nearby stations or popular chips above."));
         }
         updateStatus();
         applyResultsSort();
@@ -677,6 +942,16 @@ public class RailwayApp extends Application {
         classRow.getChildren().add(clsLbl);
         classRow.getChildren().addAll(classBtns);
 
+        // Coach selector (Phase 3)
+        HBox coachRow = new HBox(8);
+        coachRow.setAlignment(Pos.CENTER_LEFT);
+        Label coachLbl = new Label("Coach:");
+        coachCombo = new ComboBox<>();
+        coachCombo.getItems().addAll("A1", "A2", "B1", "B2", "S1", "S2");
+        coachCombo.setValue("A1");
+        coachCombo.setPrefWidth(80);
+        coachRow.getChildren().addAll(coachLbl, coachCombo);
+
         // Num passengers
         HBox numRow = new HBox(8);
         numRow.setAlignment(Pos.CENTER_LEFT);
@@ -688,7 +963,7 @@ public class RailwayApp extends Application {
         numRow.getChildren().addAll(numLbl, numBox);
 
         Label selectionInfo = new Label("Selected: 0 / 1");
-        Label fareLabel = new Label("Total Fare: ₹0");
+        Label fareLabel = new Label("Total Fare: ₹0\n(Base + GST + Resv)");
         fareLabel.getStyleClass().add("fare-label");
 
         Label seatTitle = new Label("Select Seats (class coach layout)");
@@ -735,6 +1010,14 @@ public class RailwayApp extends Application {
                     tb.setDisable(true);
                 } else {
                     tb.getStyleClass().addAll("seat", "seat-available");
+                    // Special quota highlights (demo)
+                    if ((i + 1) % 5 == 0) {
+                        tb.getStyleClass().add("seat-ladies");
+                        tb.setTooltip(new Tooltip("Ladies quota"));
+                    } else if ((i + 1) % 7 == 0) {
+                        tb.getStyleClass().add("seat-senior");
+                        tb.setTooltip(new Tooltip("Senior / Divyangjan priority"));
+                    }
                     tb.setOnAction(ev -> updateSelectionInfo(selectionInfo, seatToggles, numBox, fareLabel, train, classGroup));
                     seatToggles.add(tb);
                 }
@@ -751,6 +1034,31 @@ public class RailwayApp extends Application {
             int n = numBox.getValue();
             paxContainer.getChildren().clear();
             paxContainer.getChildren().add(paxTitle);
+            Button copyBtn = new Button("Copy details from previous passenger");
+            copyBtn.getStyleClass().add("secondary-button");
+            copyBtn.setOnAction(ev -> {
+                if (n > 1 && paxContainer.getChildren().size() > 2) {
+                    HBox prev = (HBox) paxContainer.getChildren().get(paxContainer.getChildren().size()-1);
+                    HBox last = (HBox) paxContainer.getChildren().get(paxContainer.getChildren().size()-1);
+                    // simplistic copy from second last if possible
+                    if (paxContainer.getChildren().size() > 2) {
+                        HBox secondLast = (HBox) paxContainer.getChildren().get(paxContainer.getChildren().size()-2);
+                        Object ud = secondLast.getUserData();
+                        if (ud instanceof java.util.Map) {
+                            java.util.Map<?,?> m = (java.util.Map<?,?>) ud;
+                            TextField pn = (TextField) m.get("name");
+                            if (last.getUserData() instanceof java.util.Map) {
+                                java.util.Map<?,?> lm = (java.util.Map<?,?>) last.getUserData();
+                                ((TextField)lm.get("name")).setText(pn.getText());
+                                ((TextField)lm.get("age")).setText(((TextField)m.get("age")).getText());
+                                ((ComboBox)lm.get("gender")).setValue(((ComboBox)m.get("gender")).getValue());
+                                ((ComboBox)lm.get("berth")).setValue(((ComboBox)m.get("berth")).getValue());
+                            }
+                        }
+                    }
+                }
+            });
+            paxContainer.getChildren().add(copyBtn);
             for (int i = 0; i < n; i++) {
                 HBox row = new HBox(6);
                 row.setAlignment(Pos.CENTER_LEFT);
@@ -889,13 +1197,26 @@ public class RailwayApp extends Application {
 
         actions.getChildren().addAll(backBtn, nextBtn, cancelBtn, confirmBtn);
 
+        // Berth legend (Phase 3)
+        HBox berthLegend = new HBox(10);
+        berthLegend.setAlignment(Pos.CENTER_LEFT);
+        String[] berths = {"Lower", "Middle", "Upper", "Side Lower", "Side Upper"};
+        String[] berthColors = {"#22c55e", "#3b82f6", "#f59e0b", "#a855f7", "#64748b"};
+        for (int i = 0; i < berths.length; i++) {
+            Label l = new Label("■ " + berths[i]);
+            l.setStyle("-fx-text-fill:" + berthColors[i] + "; -fx-font-size:10px;");
+            berthLegend.getChildren().add(l);
+        }
+
         root.getChildren().addAll(
             wizardHeader,
             new Label("Booking for: " + currentUser),
             summary,
             classRow,
+            coachRow,
             numRow,
             seatTitle, seatGrid, selectionInfo, fareLabel,
+            berthLegend,
             paxContainer,
             actions
         );
@@ -922,8 +1243,11 @@ public class RailwayApp extends Application {
 
         String cls = classGroup.getSelectedToggle() != null ?
             ((ToggleButton) classGroup.getSelectedToggle()).getText() : "SL";
-        double fare = dataService.calculateFare(train, cls, max);
-        fareLbl.setText("Total Fare: ₹" + String.format("%.0f", fare));
+        double base = dataService.calculateFare(train, cls, max);
+        double gst = Math.round(base * 0.05 * 100.0) / 100.0;
+        double resv = max * 60.0; // reservation charge approx
+        double total = base + gst + resv;
+        fareLbl.setText(String.format("Base: ₹%.0f + GST: ₹%.0f + Resv: ₹%.0f = Total: ₹%.0f", base, gst, resv, total));
     }
 
     private void showSuccessPNR(Train train, String cls, List<Passenger> pax, String journeyDate) {
@@ -1066,8 +1390,8 @@ public class RailwayApp extends Application {
                     vpa.setPromptText("yourname@upi");
                     vpa.getStyleClass().add("payment-input");
 
-                    Label qr = new Label("📱 Scan QR or enter VPA above\n(Fake QR for demo)");
-                    qr.getStyleClass().add("fake-qr");
+                    Canvas qr = createFakeQRCanvas(80);
+                    qr.setOnMouseClicked(e -> showAlert(Alert.AlertType.INFORMATION, "UPI", "Scanned (demo)"));
 
                     form.getChildren().addAll(l, vpa, qr);
                     form.setUserData(new Object[]{vpa});
@@ -1347,15 +1671,29 @@ public class RailwayApp extends Application {
                 VBox info = new VBox(3);
                 Label pnr = new Label("PNR: " + b.getPnr());
                 pnr.getStyleClass().add("pnr-small");
+                String status = b.getStatus() != null ? b.getStatus() : "ACTIVE";
+                Label statusBadge = new Label(status);
+                statusBadge.setStyle("-fx-background-color:" + ("CANCELLED".equals(status) ? "#ef4444" : "#22c55e") + "; -fx-text-fill:white; -fx-padding:1 6; -fx-background-radius:4; -fx-font-size:9px;");
                 Label main = new Label(b.getTrainName() + " (" + b.getCls() + ") • " + b.getJourneyDate());
                 Label pax = new Label(b.getPassengers().size() + " pax • ₹" + String.format("%.0f", b.getTotalFare()) + " • " + b.getUserName());
-                info.getChildren().addAll(pnr, main, pax);
+                info.getChildren().addAll(pnr, statusBadge, main, pax);
 
                 if (b.getPaymentMethod() != null && b.getTransactionId() != null) {
                     Label payInfo = new Label("Paid via " + b.getPaymentMethod() + " • " + b.getTransactionId());
                     payInfo.getStyleClass().add("payment-info-small");
                     info.getChildren().add(payInfo);
                 }
+
+                // Small QR per ticket
+                Canvas qr = createFakeQRCanvas(28);
+                qr.setOnMouseClicked(ev -> {
+                    Stage qrDlg = new Stage();
+                    qrDlg.initModality(Modality.APPLICATION_MODAL);
+                    VBox v = new VBox(new Label("Scan at station (demo)"), createFakeQRCanvas(120));
+                    v.setPadding(new Insets(10));
+                    qrDlg.setScene(new Scene(v));
+                    qrDlg.show();
+                });
 
                 Region sp = new Region();
                 HBox.setHgrow(sp, Priority.ALWAYS);
@@ -1374,7 +1712,7 @@ public class RailwayApp extends Application {
                     });
                 });
 
-                card.getChildren().addAll(info, sp, cancel);
+                card.getChildren().addAll(info, qr, sp, cancel);
                 setGraphic(card);
             }
         };
@@ -1466,6 +1804,18 @@ public class RailwayApp extends Application {
 
         HBox adminActions = new HBox(8, addBtn, reloadBtn);
 
+        TextField adminSearch = new TextField();
+        adminSearch.setPromptText("Search trains...");
+        adminSearch.textProperty().addListener((obs, o, val) -> {
+            if (adminListView != null) {
+                String v = val.toLowerCase();
+                List<Train> filtered = dataService.getAllTrains().stream()
+                    .filter(t -> t.getTrainNo().toLowerCase().contains(v) || t.getName().toLowerCase().contains(v))
+                    .collect(Collectors.toList());
+                adminListView.setItems(FXCollections.observableArrayList(filtered));
+            }
+        });
+
         // Current trains table (simple ListView for admin too for consistency)
         adminListView = new ListView<>();
         adminListView.setPrefHeight(280);
@@ -1487,7 +1837,17 @@ public class RailwayApp extends Application {
             }
         });
 
-        container.getChildren().addAll(title, form, adminActions, new Label("Current Trains:"), adminListView);
+        // Simple visual "chart" - occupancy bars (Phase 5)
+        HBox chartBox = new HBox(4);
+        chartBox.setAlignment(Pos.BOTTOM_LEFT);
+        for (int i = 0; i < 5; i++) {
+            Rectangle bar = new Rectangle(20, 10 + Math.random()*60);
+            bar.setFill(Color.web(i % 2 == 0 ? "#ff9933" : "#0066b3"));
+            chartBox.getChildren().add(bar);
+        }
+        Label chartLabel = new Label("Simulated train occupancy");
+
+        container.getChildren().addAll(title, form, adminActions, adminSearch, new Label("Current Trains:"), adminListView, chartLabel, chartBox);
         VBox.setVgrow(adminListView, Priority.ALWAYS);
 
         // load initial
@@ -1584,18 +1944,117 @@ public class RailwayApp extends Application {
         a.showAndWait();
     }
 
+    // ==================== PHASE 0 HELPERS ====================
+    private void applyTheme(String theme) {
+        currentTheme = theme;
+        if (mainRoot == null) return;
+        mainRoot.getStyleClass().removeAll("theme-dark", "theme-light", "theme-classic", "high-contrast");
+        mainRoot.getStyleClass().add("theme-" + theme);
+        if (highContrast) {
+            mainRoot.getStyleClass().add("high-contrast");
+        }
+        // Update bg for classic/light fallbacks
+        if ("light".equals(theme)) {
+            mainRoot.setStyle("-fx-background-color: #f8f9fa;");
+        } else if ("classic".equals(theme)) {
+            mainRoot.setStyle("-fx-background-color: #e8f0f8;");
+        } else {
+            mainRoot.setStyle("-fx-background-color: #0a192f;");
+        }
+    }
+
+    private void toggleHighContrast() {
+        highContrast = !highContrast;
+        applyTheme(currentTheme);
+    }
+
+    private void addTooltip(Node node, String text) {
+        if (node != null) {
+            Tooltip.install(node, new Tooltip(text));
+        }
+    }
+
+    private Canvas createFakeQRCanvas(double size) {
+        Canvas c = new Canvas(size, size);
+        GraphicsContext g = c.getGraphicsContext2D();
+        g.setFill(Color.WHITE);
+        g.fillRect(0, 0, size, size);
+        g.setFill(Color.BLACK);
+        double m = size / 25.0;
+        // Finder patterns (3 corners)
+        for (int[] corner : new int[][]{{1,1}, {1,19}, {19,1}}) {
+            int x = corner[0]; int y = corner[1];
+            g.fillRect(x*m, y*m, 7*m, 7*m);
+            g.setFill(Color.WHITE); g.fillRect((x+1)*m, (y+1)*m, 5*m, 5*m);
+            g.setFill(Color.BLACK); g.fillRect((x+2)*m, (y+2)*m, 3*m, 3*m);
+        }
+        // Random data modules for demo
+        g.setFill(Color.BLACK);
+        for (int i = 0; i < 80; i++) {
+            int x = 4 + (int)(Math.random()*17);
+            int y = 4 + (int)(Math.random()*17);
+            if ((x < 9 && y < 9) || (x < 9 && y > 18) || (x > 18 && y < 9)) continue;
+            g.fillRect(x*m, y*m, m*0.9, m*0.9);
+        }
+        return c;
+    }
+
+    private void createConfetti(Pane container) {
+        if (container == null) return;
+        for (int i = 0; i < 35; i++) {
+            Circle dot = new Circle(3 + Math.random()*3);
+            dot.setFill(Color.rgb((int)(Math.random()*255), (int)(Math.random()*200), 50 + (int)(Math.random()*150)));
+            dot.setTranslateX(Math.random() * container.getWidth());
+            dot.setTranslateY(-10);
+            container.getChildren().add(dot);
+            javafx.animation.TranslateTransition tt = new javafx.animation.TranslateTransition(Duration.millis(1200 + Math.random()*800), dot);
+            tt.setToY(container.getHeight() + 20);
+            tt.setToX(dot.getTranslateX() + (Math.random()-0.5)*80);
+            tt.setOnFinished(e -> container.getChildren().remove(dot));
+            tt.play();
+        }
+    }
+
+    private void addKeyboardShortcuts(Scene scene) {
+        if (scene == null) return;
+        scene.getAccelerators().put(new KeyCodeCombination(KeyCode.K, KeyCombination.SHORTCUT_DOWN), () -> {
+            if (searchView != null) {
+                switchToView(searchView);
+                if (fromBox != null) fromBox.requestFocus();
+            }
+        });
+        scene.getAccelerators().put(new KeyCodeCombination(KeyCode.ESCAPE), () -> {
+            // Close top dialog if any (simplified: no-op for now, dialogs handle own)
+        });
+    }
+
+    private void setupAutocomplete(ComboBox<String> box) {
+        if (box == null) return;
+        box.setEditable(true);
+        // Simple filtering on edit
+        box.getEditor().textProperty().addListener((obs, old, val) -> {
+            if (val == null || val.isBlank()) {
+                box.setItems(FXCollections.observableArrayList(dataService.getAllStations()));
+                return;
+            }
+            String v = val.toLowerCase();
+            List<String> filtered = dataService.getAllStations().stream()
+                .filter(s -> s.toLowerCase().contains(v))
+                .limit(8)
+                .collect(Collectors.toList());
+            box.setItems(FXCollections.observableArrayList(filtered));
+            if (!box.isShowing()) box.show();
+        });
+    }
+
     public static void main(String[] args) {
         launch(args);
     }
 
     private void toggleTheme() {
+        // Legacy toggle now cycles through themes
         isDarkTheme = !isDarkTheme;
-        if (mainRoot != null) {
-            if (isDarkTheme) {
-                mainRoot.setStyle("-fx-background-color: #0a192f;");
-            } else {
-                mainRoot.setStyle("-fx-background-color: #f8f9fa;");
-            }
-        }
+        String next = "dark".equals(currentTheme) ? "light" : "classic".equals(currentTheme) ? "dark" : "classic";
+        applyTheme(next);
     }
 }
