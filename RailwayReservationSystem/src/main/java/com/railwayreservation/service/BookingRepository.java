@@ -1,6 +1,7 @@
 package com.railwayreservation.service;
 
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.railwayreservation.model.Booking;
 import com.railwayreservation.model.Passenger;
@@ -10,7 +11,6 @@ import com.zaxxer.hikari.HikariDataSource;
 import java.sql.*;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 
 public class BookingRepository {
 
@@ -18,7 +18,8 @@ public class BookingRepository {
     private static final String DB_USER = "sa";
     private static final String DB_PASSWORD = "";
 
-    private final ObjectMapper mapper = new ObjectMapper();
+    private final ObjectMapper mapper = new ObjectMapper()
+            .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
     private final HikariDataSource dataSource;
 
     public BookingRepository() {
@@ -43,18 +44,22 @@ public class BookingRepository {
              Statement stmt = conn.createStatement()) {
             stmt.execute("""
                 CREATE TABLE IF NOT EXISTS bookings (
-                    pnr VARCHAR(20) PRIMARY KEY,
+                    pnr VARCHAR(40) PRIMARY KEY,
                     user_name VARCHAR(100),
-                    train_no VARCHAR(10),
-                    train_name VARCHAR(100),
-                    journey_date VARCHAR(20),
-                    cls VARCHAR(10),
+                    train_no VARCHAR(20),
+                    train_name VARCHAR(200),
+                    journey_date VARCHAR(30),
+                    cls VARCHAR(20),
                     total_fare DOUBLE,
-                    booked_at VARCHAR(30),
-                    payment_method VARCHAR(30),
-                    transaction_id VARCHAR(30),
-                    payment_status VARCHAR(20),
-                    passengers_json TEXT
+                    booked_at VARCHAR(40),
+                    payment_method VARCHAR(50),
+                    transaction_id VARCHAR(60),
+                    payment_status VARCHAR(40),
+                    status VARCHAR(20) DEFAULT 'ACTIVE',
+                    cancelled_at VARCHAR(40),
+                    refund_amount DOUBLE DEFAULT 0,
+                    passengers_json TEXT,
+                    seat_numbers_json TEXT
                 )
             """);
         } catch (SQLException e) {
@@ -64,16 +69,22 @@ public class BookingRepository {
 
     public void save(Booking booking) {
         String passengersJson;
+        String seatsJson;
         try {
             passengersJson = mapper.writeValueAsString(booking.getPassengers());
         } catch (Exception e) {
             passengersJson = "[]";
         }
+        try {
+            seatsJson = mapper.writeValueAsString(booking.getSeatNumbers());
+        } catch (Exception e) {
+            seatsJson = "[]";
+        }
 
         String sql = """
             MERGE INTO bookings (pnr, user_name, train_no, train_name, journey_date, cls, total_fare,
-                                 booked_at, payment_method, transaction_id, payment_status, passengers_json)
-            KEY(pnr) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                 booked_at, payment_method, transaction_id, payment_status, status, cancelled_at, refund_amount, passengers_json, seat_numbers_json)
+            KEY(pnr) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """;
 
         try (Connection conn = dataSource.getConnection();
@@ -89,7 +100,11 @@ public class BookingRepository {
             ps.setString(9, booking.getPaymentMethod());
             ps.setString(10, booking.getTransactionId());
             ps.setString(11, booking.getPaymentStatus());
-            ps.setString(12, passengersJson);
+            ps.setString(12, booking.getStatus());
+            ps.setString(13, booking.getCancelledAt());
+            ps.setDouble(14, booking.getRefundAmount());
+            ps.setString(15, passengersJson);
+            ps.setString(16, seatsJson);
             ps.executeUpdate();
         } catch (SQLException e) {
             throw new RuntimeException("Failed to save booking", e);
@@ -117,6 +132,9 @@ public class BookingRepository {
                 b.setPaymentMethod(rs.getString("payment_method"));
                 b.setTransactionId(rs.getString("transaction_id"));
                 b.setPaymentStatus(rs.getString("payment_status"));
+                b.setStatus(rs.getString("status"));
+                b.setCancelledAt(rs.getString("cancelled_at"));
+                b.setRefundAmount(rs.getDouble("refund_amount"));
 
                 String passengersJson = rs.getString("passengers_json");
                 if (passengersJson != null && !passengersJson.isBlank()) {
@@ -129,6 +147,19 @@ public class BookingRepository {
                 } else {
                     b.setPassengers(new ArrayList<>());
                 }
+
+                String seatsJson = rs.getString("seat_numbers_json");
+                if (seatsJson != null && !seatsJson.isBlank()) {
+                    try {
+                        List<String> seats = mapper.readValue(seatsJson, new TypeReference<List<String>>() {});
+                        b.setSeatNumbers(seats);
+                    } catch (Exception ignored) {
+                        b.setSeatNumbers(new ArrayList<>());
+                    }
+                } else {
+                    b.setSeatNumbers(new ArrayList<>());
+                }
+
                 bookings.add(b);
             }
         } catch (SQLException e) {

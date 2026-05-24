@@ -208,21 +208,11 @@ public class DataService {
         for (Train t : list) {
             if (t.getAvailableSeats() == null || t.getAvailableSeats().isEmpty()) {
                 Map<String, Integer> seats = new LinkedHashMap<>();
-                String clsStr = t.getClasses();
-                if (clsStr != null && !clsStr.isBlank()) {
-                    for (String c : clsStr.split("[,\\s]+")) {
-                        c = c.trim().toUpperCase().replace("II", "SL");
-                        if (!c.isEmpty()) {
-                            seats.putIfAbsent(c, 60);
-                        }
-                    }
-                }
-                if (seats.isEmpty()) {
-                    seats.put("SL", 120);
-                    seats.put("3A", 50);
-                    seats.put("2A", 30);
-                    seats.put("1A", 10);
-                }
+                // Default classes - use availableSeats as the single source of truth
+                seats.put("SL", 120);
+                seats.put("3A", 50);
+                seats.put("2A", 30);
+                seats.put("1A", 10);
                 t.setAvailableSeats(seats);
             }
             if (t.getSource() == null || t.getSource().isBlank()) {
@@ -428,13 +418,13 @@ public class DataService {
     }
 
     public synchronized boolean bookTicket(Train train, String cls, int numSeats, List<Passenger> passengers, String userName, String journeyDate,
-                              String paymentMethod, String transactionId) {
+                              String paymentMethod, String transactionId, List<String> seatNumbers) {
         if (!VALID_CLASSES.contains(cls) || !train.hasAvailability(cls, numSeats) || passengers.size() != numSeats) {
             return false;
         }
 
-        // Snapshot current train state
-        train.decrementSeats(cls, numSeats);
+        // Attempt atomic decrement
+        if (!train.decrementSeats(cls, numSeats)) return false;
         saveTrains(); // persist availability immediately
 
         Booking booking = new Booking();
@@ -450,6 +440,7 @@ public class DataService {
         booking.setPaymentMethod(paymentMethod);
         booking.setTransactionId(transactionId);
         booking.setPaymentStatus("SUCCESS");
+        booking.setSeatNumbers(seatNumbers);
 
         bookings.add(booking);
         saveBookings();
@@ -462,14 +453,19 @@ public class DataService {
         if (opt.isEmpty()) return false;
 
         Booking b = opt.get();
-        // Find matching train and restore seats
+        if (!"ACTIVE".equalsIgnoreCase(b.getStatus())) return false;
+
+        // Restore seats
         trains.stream()
             .filter(tr -> tr.getTrainNo().equals(b.getTrainNo()))
             .findFirst()
             .ifPresent(tr -> tr.incrementSeats(b.getCls(), b.getPassengers().size()));
 
-        bookings.remove(b);
-        saveAll();
+        // Soft-cancel and persist
+        b.cancel(0.0);
+        bookingRepository.save(b);
+        saveTrains();
+        saveBookings();
         return true;
     }
 

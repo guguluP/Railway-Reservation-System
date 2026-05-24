@@ -19,19 +19,23 @@ public class Train {
     private double baseFare;
     private String frequency = "Daily";
     private List<ScheduleStop> schedule = new ArrayList<>();
-    private String classes;
+
+    // Removed 'classes' field; use availableSeats.keySet() as single source of truth
+    private String trainType = "Express";   // "Rajdhani" | "Shatabdi" | "Mail" | "Express" | "Passenger"
+    private boolean active = true;
+    private int distanceKm = 0;
 
     public Train() {
         // Jackson needs no-arg ctor
     }
 
     public Train(String trainNo, String name, String source, String destination,
-                  String departure, String arrival, Map<String, Integer> availableSeats, double baseFare) {
+                 String departure, String arrival, Map<String, Integer> availableSeats, double baseFare) {
         this(trainNo, name, source, destination, departure, arrival, availableSeats, baseFare, "Daily");
     }
 
     public Train(String trainNo, String name, String source, String destination,
-                  String departure, String arrival, Map<String, Integer> availableSeats, double baseFare, String frequency) {
+                 String departure, String arrival, Map<String, Integer> availableSeats, double baseFare, String frequency) {
         this.trainNo = trainNo;
         this.name = name;
         this.source = source;
@@ -73,8 +77,15 @@ public class Train {
     public List<ScheduleStop> getSchedule() { return schedule; }
     public void setSchedule(List<ScheduleStop> schedule) { this.schedule = schedule != null ? schedule : new ArrayList<>(); }
 
-    public String getClasses() { return classes; }
-    public void setClasses(String classes) { this.classes = classes; }
+    public String getTrainType() { return trainType; }
+    public void setTrainType(String trainType) { this.trainType = trainType; }
+
+    public boolean isActive() { return active; }
+    public void setActive(boolean active) { this.active = active; }
+
+    public int getDistanceKm() { return distanceKm; }
+    public void setDistanceKm(int distanceKm) { this.distanceKm = distanceKm; }
+
     public int getTotalAvailable() {
         return availableSeats.values().stream().mapToInt(Integer::intValue).sum();
     }
@@ -84,12 +95,22 @@ public class Train {
         return avail != null && avail >= count;
     }
 
-    public void decrementSeats(String cls, int count) {
-        availableSeats.computeIfPresent(cls, (k, v) -> Math.max(0, v - count));
+    // Return true if decrement succeeded, false if insufficient seats
+    public synchronized boolean decrementSeats(String cls, int count) {
+        Integer avail = availableSeats.get(cls);
+        if (avail == null || avail < count) return false;
+        availableSeats.put(cls, avail - count);
+        return true;
     }
 
-    public void incrementSeats(String cls, int count) {
+    // Increment seats (restore on cancel)
+    public synchronized void incrementSeats(String cls, int count) {
         availableSeats.compute(cls, (k, v) -> (v == null ? 0 : v) + count);
+    }
+
+    // Single source of truth for classes present on this train
+    public List<String> getClassList() {
+        return new ArrayList<>(availableSeats.keySet());
     }
 
     @Override
@@ -106,7 +127,5 @@ public class Train {
     }
 
     @Override
-    public int hashCode() {
-        return Objects.hash(trainNo);
-    }
+    public int hashCode() { return Objects.hash(trainNo); }
 }

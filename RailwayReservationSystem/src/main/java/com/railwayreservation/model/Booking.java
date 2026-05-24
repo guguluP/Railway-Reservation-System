@@ -1,5 +1,7 @@
 package com.railwayreservation.model;
 
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -13,13 +15,18 @@ public class Booking {
     private String cls;
     private List<Passenger> passengers = new ArrayList<>();
     private double totalFare;
-    private String bookedAt; // ISO string for simplicity (no extra Jackson modules)
+    private String bookedAt; // ISO string for simplicity
     private String paymentMethod;   // "Credit Card", "UPI", "Net Banking", "Wallet"
     private String transactionId;   // e.g. RAILTXN123456789012
     private String paymentStatus;   // "SUCCESS"
 
-    public Booking() {
-    }
+    // New audit/cancellation fields
+    private String status = "ACTIVE";      // ACTIVE | CANCELLED | REFUNDED
+    private String cancelledAt;
+    private double refundAmount = 0.0;
+    private List<String> seatNumbers = new ArrayList<>();
+
+    public Booking() {}
 
     public String getPnr() { return pnr; }
     public void setPnr(String pnr) { this.pnr = pnr; }
@@ -57,10 +64,43 @@ public class Booking {
     public String getPaymentStatus() { return paymentStatus; }
     public void setPaymentStatus(String paymentStatus) { this.paymentStatus = paymentStatus; }
 
+    public String getStatus() { return status; }
+    public void setStatus(String status) { this.status = status; }
+
+    public String getCancelledAt() { return cancelledAt; }
+    public void setCancelledAt(String cancelledAt) { this.cancelledAt = cancelledAt; }
+
+    public double getRefundAmount() { return refundAmount; }
+    public void setRefundAmount(double refundAmount) { this.refundAmount = refundAmount; }
+
+    public List<String> getSeatNumbers() { return seatNumbers; }
+    public void setSeatNumbers(List<String> seatNumbers) { this.seatNumbers = seatNumbers != null ? seatNumbers : new ArrayList<>(); }
+
+    public List<String> validate() {
+        List<String> errors = new ArrayList<>();
+        if (pnr == null || pnr.isBlank())       errors.add("PNR is required");
+        if (trainNo == null || trainNo.isBlank()) errors.add("Train number is required");
+        if (userName == null || userName.isBlank()) errors.add("User is required");
+        if (passengers == null || passengers.isEmpty()) errors.add("At least one passenger required");
+        if (totalFare < 0)                       errors.add("Fare cannot be negative");
+        return errors;
+    }
+
+    public void cancel(double refund) {
+        this.status = "CANCELLED";
+        this.cancelledAt = LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME);
+        this.refundAmount = refund;
+        this.paymentStatus = refund > 0 ? "REFUND_PENDING" : "NO_REFUND";
+    }
+
+    public LocalDateTime getBookedAtParsed() {
+        try { return LocalDateTime.parse(bookedAt); } catch (Exception e) { return null; }
+    }
+
     @Override
     public String toString() {
         String payInfo = (paymentMethod != null) ? " | Paid via " + paymentMethod + " (" + transactionId + ")" : "";
-        return "PNR: " + pnr + " | " + trainName + " (" + cls + ") on " + journeyDate + " | " + passengers.size() + " pax | ₹" + String.format("%.0f", totalFare) + payInfo;
+        return "PNR: " + pnr + " | " + trainName + " (" + cls + ") on " + journeyDate + " | " + passengers.size() + " pax | ₹" + String.format("%.0f", totalFare) + payInfo + (" ["+status+"]");
     }
 
     @Override
@@ -72,7 +112,5 @@ public class Booking {
     }
 
     @Override
-    public int hashCode() {
-        return Objects.hash(pnr);
-    }
+    public int hashCode() { return Objects.hash(pnr); }
 }

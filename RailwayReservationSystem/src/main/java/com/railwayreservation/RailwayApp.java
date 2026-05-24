@@ -834,14 +834,28 @@ public class RailwayApp extends Application {
                         TextField ageF = (TextField) meta.get("age");
                         ComboBox<String> gC = (ComboBox<String>) meta.get("gender");
                         ComboBox<String> bC = (ComboBox<String>) meta.get("berth");
-                        paxList.add(new Passenger(nameF.getText().trim(), ageF.getText().trim(), gC.getValue(), bC.getValue()));
+                        int ageVal;
+                        try {
+                            ageVal = Integer.parseInt(ageF.getText().trim());
+                        } catch (NumberFormatException ex) {
+                            showAlert(Alert.AlertType.WARNING, "Invalid Age", "Please enter a valid age for passenger " + (idx+1));
+                            return;
+                        }
+                        paxList.add(new Passenger(nameF.getText().trim(), ageVal, gC.getValue(), bC.getValue()));
                     } else {
                         // fallback to older index-based parsing
                         TextField nameF = (TextField) row.getChildren().get(1);
                         TextField ageF = (TextField) row.getChildren().get(3);
                         ComboBox<String> gC = (ComboBox<String>) row.getChildren().get(5);
                         ComboBox<String> bC = (ComboBox<String>) row.getChildren().get(7);
-                        paxList.add(new Passenger(nameF.getText().trim(), ageF.getText().trim(), gC.getValue(), bC.getValue()));
+                        int ageVal;
+                        try {
+                            ageVal = Integer.parseInt(ageF.getText().trim());
+                        } catch (NumberFormatException ex) {
+                            showAlert(Alert.AlertType.WARNING, "Invalid Age", "Please enter a valid age for passenger " + (idx+1));
+                            return;
+                        }
+                        paxList.add(new Passenger(nameF.getText().trim(), ageVal, gC.getValue(), bC.getValue()));
                     }
                     idx++;
                     if (idx >= num) break;
@@ -852,9 +866,12 @@ public class RailwayApp extends Application {
 
             double fare = dataService.calculateFare(train, selectedClass, num);
 
+            // Collect selected seat numbers
+            java.util.List<String> selectedSeats = seatToggles.stream().filter(ToggleButton::isSelected).map(ToggleButton::getText).collect(java.util.stream.Collectors.toList());
+
             // Close booking details dialog and open payment gateway
             dialog.close();
-            Platform.runLater(() -> openPaymentGateway(train, selectedClass, num, paxList, jDate, fare));
+            Platform.runLater(() -> openPaymentGateway(train, selectedClass, num, paxList, jDate, fare, selectedSeats));
         });
 
         cancelBtn.setOnAction(e -> dialog.close());
@@ -957,7 +974,7 @@ public class RailwayApp extends Application {
      * On successful payment, books the ticket and shows receipt + PNR.
      */
     private void openPaymentGateway(Train train, String cls, int numPassengers, List<Passenger> paxList,
-                                    String journeyDate, double totalFare) {
+                                    String journeyDate, double totalFare, java.util.List<String> seatNumbers) {
 
         Stage payDialog = new Stage();
         payDialog.initModality(Modality.APPLICATION_MODAL);
@@ -1140,7 +1157,7 @@ public class RailwayApp extends Application {
 
                 if (success) {
                     String txnId = generateTransactionId();
-                    boolean booked = dataService.bookTicket(train, cls, numPassengers, paxList, currentUser, journeyDate, method, txnId);
+                    boolean booked = dataService.bookTicket(train, cls, numPassengers, paxList, currentUser, journeyDate, method, txnId, seatNumbers);
 
                     if (booked) {
                         payDialog.close();
