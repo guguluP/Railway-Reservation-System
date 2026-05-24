@@ -43,7 +43,7 @@ public class RailwayApp extends Application {
     private Label userLabel;
     private Stage primaryStage;
 
-    private static final List<String> CLASS_OPTIONS = List.of("SL", "3A", "2A", "1A");
+    private static final List<String> CLASS_OPTIONS = List.of("SL", "3A", "2A", "1A", "2S", "CC", "EC", "P");
 
     @Override
     public void start(Stage primaryStage) {
@@ -271,19 +271,32 @@ public class RailwayApp extends Application {
                 train.getSource() + " → " + train.getDestination() + "  |  " + train.getDeparture() + " - " + train.getArrival());
         summary.getChildren().add(sum);
 
-        // Class selector
         HBox classRow = new HBox(8);
         classRow.setAlignment(Pos.CENTER_LEFT);
         Label clsLbl = new Label("Class:");
         ToggleGroup classGroup = new ToggleGroup();
         List<ToggleButton> classBtns = new ArrayList<>();
-        for (String c : CLASS_OPTIONS) {
+        List<String> trainClassOptions = new ArrayList<>();
+        if (train.getAvailableSeats() != null && !train.getAvailableSeats().isEmpty()) {
+            for (String k : train.getAvailableSeats().keySet()) {
+                if (CLASS_OPTIONS.contains(k)) {
+                    Integer cnt = train.getAvailableSeats().get(k);
+                    if (cnt != null && cnt > 0) {
+                        trainClassOptions.add(k);
+                    }
+                }
+            }
+        }
+        if (trainClassOptions.isEmpty()) {
+            trainClassOptions.add(CLASS_OPTIONS.get(0));
+        }
+        for (String c : trainClassOptions) {
             ToggleButton tb = new ToggleButton(c);
             tb.setToggleGroup(classGroup);
             tb.getStyleClass().add("class-toggle");
             classBtns.add(tb);
         }
-        classBtns.get(0).setSelected(true); // default SL
+        classBtns.get(0).setSelected(true);
         classRow.getChildren().add(clsLbl);
         classRow.getChildren().addAll(classBtns);
 
@@ -297,33 +310,63 @@ public class RailwayApp extends Application {
 
         numRow.getChildren().addAll(numLbl, numBox);
 
-        // Seat map
-        Label seatTitle = new Label("Select Seats (visual coach map)");
-        seatTitle.getStyleClass().add("section-title-small");
-
-        GridPane seatGrid = new GridPane();
-        seatGrid.setHgap(4);
-        seatGrid.setVgap(4);
-        seatGrid.getStyleClass().add("seat-grid");
-        List<ToggleButton> seatToggles = new ArrayList<>();
-        final int SEAT_COLS = 10;
-        final int SEAT_ROWS = 4;
-        for (int r = 0; r < SEAT_ROWS; r++) {
-            for (int c = 0; c < SEAT_COLS; c++) {
-                ToggleButton seat = new ToggleButton((r * SEAT_COLS + c + 1) + "");
-                seat.getStyleClass().addAll("seat", "seat-available");
-                seat.setPrefSize(26, 26);
-                seatGrid.add(seat, c, r);
-                seatToggles.add(seat);
-            }
-        }
-
-        // Live selected count + fare
         Label selectionInfo = new Label("Selected: 0 / 1");
         Label fareLabel = new Label("Total Fare: ₹0");
         fareLabel.getStyleClass().add("fare-label");
 
-        // Passenger form container (dynamic)
+        Label seatTitle = new Label("Select Seats (class coach layout)");
+        seatTitle.getStyleClass().add("section-title-small");
+
+        GridPane seatGrid = new GridPane();
+        seatGrid.setHgap(3);
+        seatGrid.setVgap(3);
+        seatGrid.getStyleClass().add("seat-grid");
+        for (int i = 0; i < 6; i++) {
+            javafx.scene.layout.ColumnConstraints cc = new javafx.scene.layout.ColumnConstraints();
+            cc.setPrefWidth(32);
+            seatGrid.getColumnConstraints().add(cc);
+        }
+        List<ToggleButton> seatToggles = new ArrayList<>();
+        Runnable rebuildSeats = () -> {
+            seatGrid.getChildren().clear();
+            seatToggles.clear();
+            String cls = (classGroup.getSelectedToggle() != null) ? ((ToggleButton) classGroup.getSelectedToggle()).getText() : "SL";
+            seatTitle.setText("IR " + cls + " Coach Map");
+            if ("SL".equals(cls) || "3A".equals(cls)) {
+                for (int b = 0; b < 4; b++) {
+                    int r = b;
+                    ToggleButton sl = new ToggleButton("SL" + (b+1)); sl.getStyleClass().addAll("seat","seat-available"); sl.setPrefSize(30,18); seatGrid.add(sl,0,r); seatToggles.add(sl);
+                    ToggleButton su = new ToggleButton("SU" + (b+1)); su.getStyleClass().addAll("seat","seat-available"); su.setPrefSize(30,18); seatGrid.add(su,1,r); seatToggles.add(su);
+                    ToggleButton lb = new ToggleButton("LB" + (b+1)); lb.getStyleClass().addAll("seat","seat-available"); lb.setPrefSize(30,18); seatGrid.add(lb,3,r); seatToggles.add(lb);
+                    ToggleButton mb = new ToggleButton("MB" + (b+1)); mb.getStyleClass().addAll("seat","seat-available"); mb.setPrefSize(30,18); seatGrid.add(mb,4,r); seatToggles.add(mb);
+                    ToggleButton ub = new ToggleButton("UB" + (b+1)); ub.getStyleClass().addAll("seat","seat-available"); ub.setPrefSize(30,18); seatGrid.add(ub,5,r); seatToggles.add(ub);
+                    Label aisle = new Label("—"); aisle.getStyleClass().add("aisle"); seatGrid.add(aisle,2,r);
+                }
+            } else if ("2A".equals(cls) || "1A".equals(cls)) {
+                for (int b = 0; b < 4; b++) {
+                    int r = b;
+                    ToggleButton sl = new ToggleButton("SL" + (b+1)); sl.getStyleClass().addAll("seat","seat-available"); sl.setPrefSize(30,18); seatGrid.add(sl,0,r); seatToggles.add(sl);
+                    ToggleButton su = new ToggleButton("SU" + (b+1)); su.getStyleClass().addAll("seat","seat-available"); su.setPrefSize(30,18); seatGrid.add(su,1,r); seatToggles.add(su);
+                    ToggleButton lb = new ToggleButton("LB" + (b+1)); lb.getStyleClass().addAll("seat","seat-available"); lb.setPrefSize(30,18); seatGrid.add(lb,3,r); seatToggles.add(lb);
+                    ToggleButton ub = new ToggleButton("UB" + (b+1)); ub.getStyleClass().addAll("seat","seat-available"); ub.setPrefSize(30,18); seatGrid.add(ub,4,r); seatToggles.add(ub);
+                    Label aisle = new Label("—"); aisle.getStyleClass().add("aisle"); seatGrid.add(aisle,2,r);
+                }
+            } else {
+                for (int b = 0; b < 5; b++) {
+                    int r = b;
+                    ToggleButton w1 = new ToggleButton((b*5+1)+"W"); w1.getStyleClass().addAll("seat","seat-available"); w1.setPrefSize(26,18); seatGrid.add(w1,0,r); seatToggles.add(w1);
+                    ToggleButton a1 = new ToggleButton((b*5+2)+"A"); a1.getStyleClass().addAll("seat","seat-available"); a1.setPrefSize(26,18); seatGrid.add(a1,1,r); seatToggles.add(a1);
+                    Label aisle = new Label("|"); aisle.getStyleClass().add("aisle"); seatGrid.add(aisle,2,r);
+                    ToggleButton a2 = new ToggleButton((b*5+3)+"A"); a2.getStyleClass().addAll("seat","seat-available"); a2.setPrefSize(26,18); seatGrid.add(a2,3,r); seatToggles.add(a2);
+                    ToggleButton m  = new ToggleButton((b*5+4)+"M"); m.getStyleClass().addAll("seat","seat-available"); m.setPrefSize(26,18); seatGrid.add(m,4,r); seatToggles.add(m);
+                    ToggleButton w2 = new ToggleButton((b*5+5)+"W"); w2.getStyleClass().addAll("seat","seat-available"); w2.setPrefSize(26,18); seatGrid.add(w2,5,r); seatToggles.add(w2);
+                }
+            }
+            for (ToggleButton s : seatToggles) {
+                s.setOnAction(ev -> updateSelectionInfo(selectionInfo, seatToggles, numBox, fareLabel, train, classGroup));
+            }
+        };
+
         VBox paxContainer = new VBox(6);
         paxContainer.getStyleClass().add("pax-container");
         Label paxTitle = new Label("Passenger Details");
@@ -356,25 +399,17 @@ public class RailwayApp extends Application {
             updateSelectionInfo(selectionInfo, seatToggles, numBox, fareLabel, train, classGroup);
         });
 
-        // Wire class and seat selection
         classGroup.selectedToggleProperty().addListener((obs, old, sel) -> {
+            rebuildSeats.run();
             updateSelectionInfo(selectionInfo, seatToggles, numBox, fareLabel, train, classGroup);
-            // reset seat selection when class changes
             seatToggles.forEach(s -> s.setSelected(false));
             seatToggles.forEach(s -> s.getStyleClass().remove("seat-selected"));
         });
 
-        for (ToggleButton s : seatToggles) {
-            s.setOnAction(ev -> {
-                updateSelectionInfo(selectionInfo, seatToggles, numBox, fareLabel, train, classGroup);
-            });
-        }
-
-        // Initial
         updatePaxForm.run();
+        rebuildSeats.run();
         updateSelectionInfo(selectionInfo, seatToggles, numBox, fareLabel, train, classGroup);
 
-        // Confirm / Cancel
         HBox actions = new HBox(10);
         actions.setAlignment(Pos.CENTER_RIGHT);
         Button cancelBtn = new Button("Cancel");
@@ -414,7 +449,7 @@ public class RailwayApp extends Application {
 
             // Close booking details dialog and open payment gateway (Phase 3)
             dialog.close();
-            openPaymentGateway(train, selectedClass, num, paxList, jDate, fare);
+            Platform.runLater(() -> openPaymentGateway(train, selectedClass, num, paxList, jDate, fare));
         });
 
         cancelBtn.setOnAction(e -> dialog.close());
@@ -692,17 +727,19 @@ public class RailwayApp extends Application {
 
                     if (booked) {
                         payDialog.close();
-                        showPaymentReceipt(train, cls, paxList, journeyDate, totalFare, method, txnId);
-                        resultsListView.refresh();
-                        refreshBookingsView();
-                        updateStatus();
+                        Platform.runLater(() -> {
+                            showPaymentReceipt(train, cls, paxList, journeyDate, totalFare, method, txnId);
+                            resultsListView.refresh();
+                            refreshBookingsView();
+                            updateStatus();
+                        });
                     } else {
-                        showAlert(Alert.AlertType.ERROR, "Booking Failed", "Seats no longer available after payment simulation.");
                         payDialog.close();
+                        Platform.runLater(() -> showAlert(Alert.AlertType.ERROR, "Booking Failed", "Seats no longer available after payment simulation."));
                     }
                 } else {
-                    showAlert(Alert.AlertType.ERROR, "Payment Failed",
-                            "Your transaction was declined by the bank / gateway.\nPlease try another method or card.");
+                    Platform.runLater(() -> showAlert(Alert.AlertType.ERROR, "Payment Failed",
+                            "Your transaction was declined by the bank / gateway.\nPlease try another method or card."));
                     // allow retry
                 }
             });
@@ -943,7 +980,7 @@ public class RailwayApp extends Application {
             }
         });
 
-        Button reloadBtn = new Button("Reload Sample Trains");
+        Button reloadBtn = new Button("Reload Trains from JSON");
         reloadBtn.getStyleClass().add("secondary-button");
         reloadBtn.setOnAction(e -> {
             dataService.reloadSamples();

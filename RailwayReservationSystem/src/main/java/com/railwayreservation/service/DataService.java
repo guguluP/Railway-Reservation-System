@@ -1,6 +1,7 @@
 package com.railwayreservation.service;
 
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.railwayreservation.model.Booking;
@@ -24,11 +25,11 @@ public class DataService {
 
     private static final Path DATA_DIR = Paths.get(System.getProperty("user.home"), ".railway-reservation");
     private static final Path TRAINS_FILE = DATA_DIR.resolve("trains.json");
-    private static final Path BOOKINGS_FILE = DATA_DIR.resolve("bookings.json");
 
     private final ObjectMapper mapper;
     private List<Train> trains = new ArrayList<>();
     private List<Booking> bookings = new ArrayList<>();
+    private final BookingRepository bookingRepository;
 
     private static final Map<String, Double> CLASS_MULTIPLIERS = Map.ofEntries(
         Map.entry("SL", 1.0),
@@ -56,10 +57,64 @@ public class DataService {
         "Sealdah", "Howrah"
     );
 
+    private static final Map<String, String> CODE_TO_NAME = new LinkedHashMap<>();
+    private static final Map<String, String> NAME_TO_CODE = new HashMap<>();
+
+    static {
+        addStation("NDLS", "New Delhi");
+        addStation("DLI", "Delhi");
+        addStation("ANVT", "Anand Vihar (T)");
+        addStation("GZB", "Ghaziabad");
+        addStation("KRJ", "Khurja");
+        addStation("ALJN", "Aligarh");
+        addStation("MTJ", "Mathura");
+        addStation("AGC", "Agra Cantt.");
+        addStation("TDL", "Tundla");
+        addStation("FZD", "Firozabad");
+        addStation("SKB", "Shikohabad");
+        addStation("ETW", "Etawah");
+        addStation("CNB", "Kanpur");
+        addStation("FTP", "Fatehpur");
+        addStation("PRYJ", "Prayagraj");
+        addStation("BSB", "Varanasi");
+        addStation("MZP", "Mirzapur");
+        addStation("DDU", "Pt. Deen Dayal Upadhyaya Jn");
+        addStation("SSM", "Sasaram");
+        addStation("DOS", "Dehri-on-Sone");
+        addStation("GAYA", "Gaya");
+        addStation("DHN", "Dhanbad");
+        addStation("BXR", "Buxar");
+        addStation("ARA", "Ara");
+        addStation("DNR", "Danapur");
+        addStation("PNBE", "Patna");
+        addStation("MKA", "Mokama");
+        addStation("KIUL", "Kiul");
+        addStation("JAJ", "Jhajha");
+        addStation("JSME", "Jasidih");
+        addStation("MDP", "Madhupur");
+        addStation("CRJ", "Chittaranjan");
+        addStation("ASN", "Asansol");
+        addStation("DGR", "Durgapur");
+        addStation("JMP", "Jamalpur");
+        addStation("BGP", "Bhagalpur");
+        addStation("BWN", "Barddhaman");
+        addStation("HWH", "Howrah");
+        addStation("SDAH", "Sealdah");
+        addStation("KOAA", "Kolkata");
+    }
+
+    private static void addStation(String code, String name) {
+        CODE_TO_NAME.put(code, name);
+        NAME_TO_CODE.put(name, code);
+    }
+
     public DataService() {
         this.mapper = new ObjectMapper()
-            .enable(SerializationFeature.INDENT_OUTPUT);
+            .enable(SerializationFeature.INDENT_OUTPUT)
+            .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
         ensureDataDir();
+        this.bookingRepository = new BookingRepository();
+        migrateOldBookingsIfNeeded();
     }
 
     private void ensureDataDir() {
@@ -72,49 +127,99 @@ public class DataService {
 
     public void load() {
         try {
+            List<Train> realTrains = loadRealTrainsFromResource();
+            List<Train> userTrains = null;
             if (Files.exists(TRAINS_FILE)) {
-                // User-saved data from previous run takes precedence
-                trains = mapper.readValue(TRAINS_FILE.toFile(), new TypeReference<List<Train>>() {});
-            } else {
-                // Prefer real timetable data from classpath (Phase 2 enhancement)
-                List<Train> realTrains = loadRealTrainsFromResource();
-                if (!realTrains.isEmpty()) {
-                    trains = realTrains;
-                    System.out.println("Loaded " + trains.size() + " real trains from timetable data.");
-                } else {
-                    initSampleTrains();
+                try {
+                    userTrains = mapper.readValue(TRAINS_FILE.toFile(), new TypeReference<List<Train>>() {});
+                } catch (Exception ex) {
+                    System.err.println("Failed to read persisted trains: " + ex.getMessage());
                 }
-                saveTrains();
             }
-
-            if (Files.exists(BOOKINGS_FILE)) {
-                bookings = mapper.readValue(BOOKINGS_FILE.toFile(), new TypeReference<List<Booking>>() {});
+            if (!realTrains.isEmpty()) {
+                if (userTrains != null && !userTrains.isEmpty()) {
+                    Map<String, Train> userMap = new HashMap<>();
+                    for (Train u : userTrains) {
+                        if (u.getTrainNo() != null) userMap.put(u.getTrainNo(), u);
+                    }
+                    for (Train r : realTrains) {
+                        Train u = userMap.get(r.getTrainNo());
+                        if (u != null && u.getAvailableSeats() != null && !u.getAvailableSeats().isEmpty()) {
+                            r.setAvailableSeats(new LinkedHashMap<>(u.getAvailableSeats()));
+                        }
+                    }
+                }
+                trains = realTrains;
+            } else if (userTrains != null && !userTrains.isEmpty()) {
+                trains = userTrains;
             } else {
-                bookings = new ArrayList<>();
-                saveBookings();
+                initSampleTrains();
             }
+            if (trains.isEmpty()) {
+                initSampleTrains();
+            }
+            saveTrains();
+
+            // Load bookings from database (H2)
+            bookings = bookingRepository.findAll();
         } catch (Exception e) {
             System.err.println("Error loading data, falling back to samples: " + e.getMessage());
             initSampleTrains();
             bookings = new ArrayList<>();
             saveTrains();
-            saveBookings();
         }
     }
 
-    /**
-     * Loads real trains from resources/data/real-trains.json (the curated timetable data).
-     * Returns empty list if resource not found or fails to parse.
-     */
     private List<Train> loadRealTrainsFromResource() {
         try (InputStream is = getClass().getResourceAsStream("/data/real-trains.json")) {
             if (is == null) {
                 return Collections.emptyList();
             }
-            return mapper.readValue(is, new TypeReference<List<Train>>() {});
+            List<Train> list = mapper.readValue(is, new TypeReference<List<Train>>() {});
+            normalizeTrains(list);
+            return list;
         } catch (Exception e) {
             System.err.println("Could not load real-trains.json from classpath: " + e.getMessage());
             return Collections.emptyList();
+        }
+    }
+
+    private void normalizeTrains(List<Train> list) {
+        for (Train t : list) {
+            if (t.getAvailableSeats() == null || t.getAvailableSeats().isEmpty()) {
+                Map<String, Integer> seats = new LinkedHashMap<>();
+                String clsStr = t.getClasses();
+                if (clsStr != null && !clsStr.isBlank()) {
+                    for (String c : clsStr.split("[,\\s]+")) {
+                        c = c.trim().toUpperCase().replace("II", "SL");
+                        if (!c.isEmpty()) {
+                            seats.putIfAbsent(c, 60);
+                        }
+                    }
+                }
+                if (seats.isEmpty()) {
+                    seats.put("SL", 120);
+                    seats.put("3A", 50);
+                    seats.put("2A", 30);
+                    seats.put("1A", 10);
+                }
+                t.setAvailableSeats(seats);
+            }
+            if (t.getSource() == null || t.getSource().isBlank()) {
+                t.setSource("TBD");
+                t.setDestination("TBD");
+                t.setDeparture("--:--");
+                t.setArrival("--:--");
+            }
+            if (t.getBaseFare() <= 0) {
+                t.setBaseFare(1200);
+            }
+            if (t.getFrequency() == null || t.getFrequency().isBlank()) {
+                t.setFrequency("Various");
+            }
+            if (t.getSchedule() == null) {
+                t.setSchedule(new ArrayList<>());
+            }
         }
     }
 
@@ -127,10 +232,9 @@ public class DataService {
     }
 
     public void saveBookings() {
-        try {
-            mapper.writeValue(BOOKINGS_FILE.toFile(), bookings);
-        } catch (IOException e) {
-            System.err.println("Failed to save bookings: " + e.getMessage());
+        // Persist all bookings to H2 database
+        for (Booking b : bookings) {
+            bookingRepository.save(b);
         }
     }
 
@@ -191,13 +295,14 @@ public class DataService {
 
     public List<String> getAllStations() {
         if (trains.isEmpty()) {
-            return new ArrayList<>(MASTER_STATIONS);
+            return MASTER_STATIONS.stream()
+                .map(this::formatStationDisplay)
+                .collect(Collectors.toList());
         }
-        // Collect unique stations from train sources/destinations and full schedules (real timetable)
         Set<String> stations = new TreeSet<>();
         for (Train t : trains) {
-            if (t.getSource() != null && !t.getSource().isBlank()) stations.add(t.getSource());
-            if (t.getDestination() != null && !t.getDestination().isBlank()) stations.add(t.getDestination());
+            if (t.getSource() != null && !t.getSource().isBlank() && !"TBD".equalsIgnoreCase(t.getSource())) stations.add(t.getSource());
+            if (t.getDestination() != null && !t.getDestination().isBlank() && !"TBD".equalsIgnoreCase(t.getDestination())) stations.add(t.getDestination());
             if (t.getSchedule() != null) {
                 for (ScheduleStop s : t.getSchedule()) {
                     if (s.getStation() != null && !s.getStation().isBlank()) stations.add(s.getStation());
@@ -205,26 +310,78 @@ public class DataService {
             }
         }
         if (stations.isEmpty()) {
-            return new ArrayList<>(MASTER_STATIONS);
+            return MASTER_STATIONS.stream()
+                .map(this::formatStationDisplay)
+                .collect(Collectors.toList());
         }
-        return new ArrayList<>(stations);
+        return stations.stream()
+            .map(this::formatStationDisplay)
+            .collect(Collectors.toList());
     }
 
-    /**
-     * Search trains by route (case-insensitive contains for flexibility).
-     * Date is accepted for future UI but currently not filtering samples (recurring trains).
-     */
+    private String formatStationDisplay(String station) {
+        String code = NAME_TO_CODE.get(station);
+        return (code != null) ? code + " - " + station : station;
+    }
+
     public List<Train> searchTrains(String from, String to, LocalDate date) {
         if (from == null || to == null || from.isBlank() || to.isBlank()) {
             return new ArrayList<>();
         }
-        String f = from.trim().toLowerCase();
-        String t = to.trim().toLowerCase();
+        String f = resolveStation(from).toLowerCase();
+        String t = resolveStation(to).toLowerCase();
 
         return trains.stream()
-            .filter(tr -> tr.getSource().toLowerCase().contains(f) && tr.getDestination().toLowerCase().contains(t))
-            .sorted(Comparator.comparing(Train::getDeparture))
+            .filter(tr -> matchesRoute(tr, f, t))
+            .sorted(Comparator.comparing(Train::getDeparture, Comparator.nullsLast(Comparator.naturalOrder())))
             .collect(Collectors.toList());
+    }
+
+    private boolean matchesRoute(Train tr, String f, String t) {
+        String src = tr.getSource() != null ? tr.getSource().toLowerCase() : "";
+        String dst = tr.getDestination() != null ? tr.getDestination().toLowerCase() : "";
+        if (src.contains(f) && dst.contains(t)) return true;
+        List<ScheduleStop> sched = tr.getSchedule();
+        if (sched == null || sched.size() < 2) return false;
+        int fromIdx = -1;
+        int toIdx = -1;
+        for (int i = 0; i < sched.size(); i++) {
+            String st = sched.get(i).getStation();
+            if (st == null) continue;
+            String sl = st.toLowerCase();
+            if (fromIdx < 0 && sl.contains(f)) fromIdx = i;
+            if (sl.contains(t)) toIdx = i;
+        }
+        return fromIdx >= 0 && toIdx > fromIdx;
+    }
+
+    private String resolveStation(String input) {
+        if (input == null || input.isBlank()) return "";
+        String trimmed = input.trim();
+
+        if (trimmed.contains(" - ")) {
+            String[] parts = trimmed.split(" - ", 2);
+            if (parts.length == 2) {
+                String possibleCode = parts[0].trim().toUpperCase();
+                if (CODE_TO_NAME.containsKey(possibleCode)) {
+                    return CODE_TO_NAME.get(possibleCode);
+                }
+                return parts[1].trim();
+            }
+        }
+
+        String upper = trimmed.toUpperCase();
+        if (CODE_TO_NAME.containsKey(upper)) {
+            return CODE_TO_NAME.get(upper);
+        }
+
+        for (String name : NAME_TO_CODE.keySet()) {
+            if (name.equalsIgnoreCase(trimmed)) {
+                return name;
+            }
+        }
+
+        return trimmed;
     }
 
     public double calculateFare(Train train, String cls, int numPassengers) {
@@ -313,11 +470,33 @@ public class DataService {
     }
 
     public void reloadSamples() {
-        initSampleTrains();
+        List<Train> real = loadRealTrainsFromResource();
+        if (!real.isEmpty()) {
+            trains = real;
+        } else {
+            initSampleTrains();
+        }
         saveTrains();
     }
 
     public List<Train> getTrains() {
         return trains;
+    }
+
+    private void migrateOldBookingsIfNeeded() {
+        Path oldBookings = DATA_DIR.resolve("bookings.json");
+        if (Files.exists(oldBookings) && bookingRepository.findAll().isEmpty()) {
+            try {
+                List<Booking> old = mapper.readValue(oldBookings.toFile(), new TypeReference<List<Booking>>() {});
+                for (Booking b : old) {
+                    bookingRepository.save(b);
+                }
+                System.out.println("Migrated " + old.size() + " bookings from JSON to database.");
+                // Optional: rename the old file
+                Files.move(oldBookings, DATA_DIR.resolve("bookings.json.bak"), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            } catch (Exception e) {
+                System.err.println("Booking migration failed: " + e.getMessage());
+            }
+        }
     }
 }

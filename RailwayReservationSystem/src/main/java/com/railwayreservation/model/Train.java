@@ -1,11 +1,13 @@
 package com.railwayreservation.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class Train {
     private String trainNo;
     private String name;
@@ -15,8 +17,9 @@ public class Train {
     private String arrival;
     private Map<String, Integer> availableSeats = new LinkedHashMap<>();
     private double baseFare;
-    private String frequency = "Daily";   // e.g. "Daily", "Tu.W.F.Su", "M.Th.Sa", "W.Sa" from real timetable data
-    private List<ScheduleStop> schedule = new ArrayList<>();  // Full timetable stops with times (Phase 3 enhancement)
+    private String frequency = "Daily";
+    private List<ScheduleStop> schedule = new ArrayList<>();
+    private String classes;
 
     public Train() {
         // Jackson needs no-arg ctor
@@ -70,7 +73,8 @@ public class Train {
     public List<ScheduleStop> getSchedule() { return schedule; }
     public void setSchedule(List<ScheduleStop> schedule) { this.schedule = schedule != null ? schedule : new ArrayList<>(); }
 
-    // Helpers
+    public String getClasses() { return classes; }
+    public void setClasses(String classes) { this.classes = classes; }
     public int getTotalAvailable() {
         return availableSeats.values().stream().mapToInt(Integer::intValue).sum();
     }
