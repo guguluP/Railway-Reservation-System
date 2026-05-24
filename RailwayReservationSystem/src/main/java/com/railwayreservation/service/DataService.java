@@ -32,6 +32,8 @@ public class DataService {
     private List<Booking> bookings = new ArrayList<>();
     private final BookingRepository bookingRepository;
     private final UserRepository userRepository;
+    // Protect load/save/book operations from concurrent access
+    private final Object lock = new Object();
 
     private static final Map<String, Double> CLASS_MULTIPLIERS = Map.ofEntries(
         Map.entry("SL", 1.0),
@@ -128,7 +130,7 @@ public class DataService {
         }
     }
 
-    public void load() {
+    public synchronized void load() {
         try {
             List<Train> realTrains = loadRealTrainsFromResource();
             List<Train> userTrains = null;
@@ -226,7 +228,7 @@ public class DataService {
         }
     }
 
-    public void saveTrains() {
+    public synchronized void saveTrains() {
         try {
             mapper.writeValue(TRAINS_FILE.toFile(), trains);
         } catch (IOException e) {
@@ -234,14 +236,14 @@ public class DataService {
         }
     }
 
-    public void saveBookings() {
+    public synchronized void saveBookings() {
         // Persist all bookings to H2 database
         for (Booking b : bookings) {
             bookingRepository.save(b);
         }
     }
 
-    public void saveAll() {
+    public synchronized void saveAll() {
         saveTrains();
         saveBookings();
     }
@@ -410,7 +412,7 @@ public class DataService {
         return VALID_CLASSES;
     }
 
-    public boolean bookTicket(Train train, String cls, int numSeats, List<Passenger> passengers, String userName, String journeyDate,
+    public synchronized boolean bookTicket(Train train, String cls, int numSeats, List<Passenger> passengers, String userName, String journeyDate,
                               String paymentMethod, String transactionId) {
         if (!VALID_CLASSES.contains(cls) || !train.hasAvailability(cls, numSeats) || passengers.size() != numSeats) {
             return false;
@@ -440,7 +442,7 @@ public class DataService {
         return true;
     }
 
-    public boolean cancelBooking(String pnr) {
+    public synchronized boolean cancelBooking(String pnr) {
         Optional<Booking> opt = bookings.stream().filter(b -> b.getPnr().equals(pnr)).findFirst();
         if (opt.isEmpty()) return false;
 
@@ -471,7 +473,7 @@ public class DataService {
     }
 
     // Admin helpers
-    public void addOrUpdateTrain(Train train) {
+    public synchronized void addOrUpdateTrain(Train train) {
         int idx = -1;
         for (int i = 0; i < trains.size(); i++) {
             if (trains.get(i).getTrainNo().equals(train.getTrainNo())) {
@@ -486,7 +488,7 @@ public class DataService {
         saveTrains();
     }
 
-    public void reloadSamples() {
+    public synchronized void reloadSamples() {
         List<Train> real = loadRealTrainsFromResource();
         if (!real.isEmpty()) {
             trains = real;

@@ -46,6 +46,7 @@ public class RailwayApp extends Application {
     private CheckBox flexibleDatesCheck;
     private CheckBox availableSeatsOnlyCheck;
     private ListView<Train> resultsListView;
+    private ListView<Train> adminListView;
     private ListView<Booking> bookingsListView;
     private Label statusLabel;
     private TabPane tabPane;
@@ -706,40 +707,38 @@ public class RailwayApp extends Application {
         Runnable rebuildSeats = () -> {
             seatGrid.getChildren().clear();
             seatToggles.clear();
+
             String cls = (classGroup.getSelectedToggle() != null) ? ((ToggleButton) classGroup.getSelectedToggle()).getText() : "SL";
             seatTitle.setText("IR " + cls + " Coach Map");
-            if ("SL".equals(cls) || "3A".equals(cls)) {
-                for (int b = 0; b < 4; b++) {
-                    int r = b;
-                    ToggleButton sl = new ToggleButton("SL" + (b+1)); sl.getStyleClass().addAll("seat","seat-available"); sl.setPrefSize(30,18); seatGrid.add(sl,0,r); seatToggles.add(sl);
-                    ToggleButton su = new ToggleButton("SU" + (b+1)); su.getStyleClass().addAll("seat","seat-available"); su.setPrefSize(30,18); seatGrid.add(su,1,r); seatToggles.add(su);
-                    ToggleButton lb = new ToggleButton("LB" + (b+1)); lb.getStyleClass().addAll("seat","seat-available"); lb.setPrefSize(30,18); seatGrid.add(lb,3,r); seatToggles.add(lb);
-                    ToggleButton mb = new ToggleButton("MB" + (b+1)); mb.getStyleClass().addAll("seat","seat-available"); mb.setPrefSize(30,18); seatGrid.add(mb,4,r); seatToggles.add(mb);
-                    ToggleButton ub = new ToggleButton("UB" + (b+1)); ub.getStyleClass().addAll("seat","seat-available"); ub.setPrefSize(30,18); seatGrid.add(ub,5,r); seatToggles.add(ub);
-                    Label aisle = new Label("—"); aisle.getStyleClass().add("aisle"); seatGrid.add(aisle,2,r);
-                }
-            } else if ("2A".equals(cls) || "1A".equals(cls)) {
-                for (int b = 0; b < 4; b++) {
-                    int r = b;
-                    ToggleButton sl = new ToggleButton("SL" + (b+1)); sl.getStyleClass().addAll("seat","seat-available"); sl.setPrefSize(30,18); seatGrid.add(sl,0,r); seatToggles.add(sl);
-                    ToggleButton su = new ToggleButton("SU" + (b+1)); su.getStyleClass().addAll("seat","seat-available"); su.setPrefSize(30,18); seatGrid.add(su,1,r); seatToggles.add(su);
-                    ToggleButton lb = new ToggleButton("LB" + (b+1)); lb.getStyleClass().addAll("seat","seat-available"); lb.setPrefSize(30,18); seatGrid.add(lb,3,r); seatToggles.add(lb);
-                    ToggleButton ub = new ToggleButton("UB" + (b+1)); ub.getStyleClass().addAll("seat","seat-available"); ub.setPrefSize(30,18); seatGrid.add(ub,4,r); seatToggles.add(ub);
-                    Label aisle = new Label("—"); aisle.getStyleClass().add("aisle"); seatGrid.add(aisle,2,r);
-                }
-            } else {
-                for (int b = 0; b < 5; b++) {
-                    int r = b;
-                    ToggleButton w1 = new ToggleButton((b*5+1)+"W"); w1.getStyleClass().addAll("seat","seat-available"); w1.setPrefSize(26,18); seatGrid.add(w1,0,r); seatToggles.add(w1);
-                    ToggleButton a1 = new ToggleButton((b*5+2)+"A"); a1.getStyleClass().addAll("seat","seat-available"); a1.setPrefSize(26,18); seatGrid.add(a1,1,r); seatToggles.add(a1);
-                    Label aisle = new Label("|"); aisle.getStyleClass().add("aisle"); seatGrid.add(aisle,2,r);
-                    ToggleButton a2 = new ToggleButton((b*5+3)+"A"); a2.getStyleClass().addAll("seat","seat-available"); a2.setPrefSize(26,18); seatGrid.add(a2,3,r); seatToggles.add(a2);
-                    ToggleButton m  = new ToggleButton((b*5+4)+"M"); m.getStyleClass().addAll("seat","seat-available"); m.setPrefSize(26,18); seatGrid.add(m,4,r); seatToggles.add(m);
-                    ToggleButton w2 = new ToggleButton((b*5+5)+"W"); w2.getStyleClass().addAll("seat","seat-available"); w2.setPrefSize(26,18); seatGrid.add(w2,5,r); seatToggles.add(w2);
-                }
+
+            int available = (train.getAvailableSeats() != null) ? train.getAvailableSeats().getOrDefault(cls, 0) : 0;
+            int booked = dataService.getAllBookings().stream()
+                    .filter(b -> b.getTrainNo().equals(train.getTrainNo()) && cls.equals(b.getCls()))
+                    .mapToInt(b -> b.getPassengers().size()).sum();
+            int capacity = booked + available;
+
+            if (capacity <= 0) {
+                Label none = new Label("No seats available");
+                none.getStyleClass().add("no-seats");
+                seatGrid.add(none, 0, 0);
+                return;
             }
-            for (ToggleButton s : seatToggles) {
-                s.setOnAction(ev -> updateSelectionInfo(selectionInfo, seatToggles, numBox, fareLabel, train, classGroup));
+
+            int cols = 6;
+            for (int i = 0; i < capacity; i++) {
+                int r = i / cols;
+                int c = i % cols;
+                ToggleButton tb = new ToggleButton(cls + (i + 1));
+                tb.setPrefSize(30, 18);
+                if (i < booked) {
+                    tb.getStyleClass().addAll("seat", "seat-booked");
+                    tb.setDisable(true);
+                } else {
+                    tb.getStyleClass().addAll("seat", "seat-available");
+                    tb.setOnAction(ev -> updateSelectionInfo(selectionInfo, seatToggles, numBox, fareLabel, train, classGroup));
+                    seatToggles.add(tb);
+                }
+                seatGrid.add(tb, c, r);
             }
         };
 
@@ -766,6 +765,12 @@ public class RailwayApp extends Application {
                 berthC.getItems().addAll("Lower", "Middle", "Upper", "Side Lower", "Side Upper");
                 berthC.setValue("Lower");
                 row.getChildren().addAll(new Label("Name:"), nameF, new Label("Age:"), ageF, new Label("Gender:"), genderC, new Label("Berth:"), berthC);
+                java.util.Map<String, Node> meta = new java.util.HashMap<>();
+                meta.put("name", nameF);
+                meta.put("age", ageF);
+                meta.put("gender", genderC);
+                meta.put("berth", berthC);
+                row.setUserData(meta);
                 paxContainer.getChildren().add(row);
             }
         };
@@ -793,13 +798,7 @@ public class RailwayApp extends Application {
         Button nextBtn = new Button("Next →");
         nextBtn.getStyleClass().add("primary-button");
         int[] currentStep = {1};
-        nextBtn.setOnAction(ev -> {
-            currentStep[0]++;
-            if (currentStep[0] > 4) currentStep[0] = 4;
-            stepLabel.setText("Step " + currentStep[0] + "/4: " + (currentStep[0] == 1 ? "Class & Passengers" : currentStep[0] == 2 ? "Seat Selection" : currentStep[0] == 3 ? "Passenger Details" : "Review & Confirm"));
-            progressBar.setProgress(currentStep[0] / 4.0);
-            if (currentStep[0] == 4) nextBtn.setText("💳 Proceed to Pay");
-        });
+
         backBtn.setOnAction(ev -> {
             currentStep[0]--;
             if (currentStep[0] < 1) currentStep[0] = 1;
@@ -822,17 +821,28 @@ public class RailwayApp extends Application {
                 return;
             }
 
-            // Collect passengers from form
+            // Collect passengers from form (use userData to avoid fragile indexing)
             List<Passenger> paxList = new ArrayList<>();
             int idx = 0;
             for (Node node : paxContainer.getChildren()) {
                 if (node instanceof HBox) {
                     HBox row = (HBox) node;
-                    TextField nameF = (TextField) row.getChildren().get(1);
-                    TextField ageF = (TextField) row.getChildren().get(3);
-                    ComboBox<String> gC = (ComboBox<String>) row.getChildren().get(5);
-                    ComboBox<String> bC = (ComboBox<String>) row.getChildren().get(7);
-                    paxList.add(new Passenger(nameF.getText().trim(), ageF.getText().trim(), gC.getValue(), bC.getValue()));
+                    Object ud = row.getUserData();
+                    if (ud instanceof java.util.Map) {
+                        java.util.Map<?,?> meta = (java.util.Map<?,?>) ud;
+                        TextField nameF = (TextField) meta.get("name");
+                        TextField ageF = (TextField) meta.get("age");
+                        ComboBox<String> gC = (ComboBox<String>) meta.get("gender");
+                        ComboBox<String> bC = (ComboBox<String>) meta.get("berth");
+                        paxList.add(new Passenger(nameF.getText().trim(), ageF.getText().trim(), gC.getValue(), bC.getValue()));
+                    } else {
+                        // fallback to older index-based parsing
+                        TextField nameF = (TextField) row.getChildren().get(1);
+                        TextField ageF = (TextField) row.getChildren().get(3);
+                        ComboBox<String> gC = (ComboBox<String>) row.getChildren().get(5);
+                        ComboBox<String> bC = (ComboBox<String>) row.getChildren().get(7);
+                        paxList.add(new Passenger(nameF.getText().trim(), ageF.getText().trim(), gC.getValue(), bC.getValue()));
+                    }
                     idx++;
                     if (idx >= num) break;
                 }
@@ -939,7 +949,7 @@ public class RailwayApp extends Application {
     // ==================== PHASE 3: PAYMENT GATEWAY ====================
 
     private String generateTransactionId() {
-        return "RAILTXN" + (System.currentTimeMillis() % 1000000000000L);
+        return "RAILTXN-" + UUID.randomUUID().toString().substring(0, 12).toUpperCase();
     }
 
     /**
@@ -1165,13 +1175,43 @@ public class RailwayApp extends Application {
     }
 
     private boolean simulatePayment(String method, Object[] formData) {
+        String gateway = System.getenv("PAYMENT_GATEWAY_URL");
+        if (gateway != null && !gateway.isBlank()) {
+            try {
+                java.net.http.HttpClient client = java.net.http.HttpClient.newHttpClient();
+                com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+                java.util.Map<String, Object> payload = new java.util.HashMap<>();
+                payload.put("method", method);
+                if (formData != null && formData.length > 0 && formData[0] instanceof TextField) {
+                    String card = ((TextField) formData[0]).getText().replaceAll("\\s", "");
+                    payload.put("card_last4", card.length() > 4 ? card.substring(card.length()-4) : card);
+                }
+                String body = mapper.writeValueAsString(payload);
+                java.net.http.HttpRequest req = java.net.http.HttpRequest.newBuilder()
+                        .uri(new java.net.URI(gateway))
+                        .header("Content-Type", "application/json")
+                        .POST(java.net.http.HttpRequest.BodyPublishers.ofString(body))
+                        .build();
+                java.net.http.HttpResponse<String> resp = client.send(req, java.net.http.HttpResponse.BodyHandlers.ofString());
+                com.fasterxml.jackson.databind.JsonNode node = mapper.readTree(resp.body());
+                if (node.has("success")) return node.get("success").asBoolean(false);
+                if (node.has("status")) {
+                    String s = node.get("status").asText();
+                    return "ok".equalsIgnoreCase(s) || "success".equalsIgnoreCase(s);
+                }
+                return false;
+            } catch (Exception ex) {
+                System.err.println("Payment gateway call failed: " + ex.getMessage());
+                return false;
+            }
+        }
+        // Fallback demo behaviour
         if ("Credit Card".equals(method) && formData != null && formData.length > 0) {
             String card = ((TextField) formData[0]).getText().replaceAll("\\s", "");
-            if (card.startsWith("4242")) return true;           // success
-            if (card.startsWith("4000")) return false;          // fail
-            return Math.random() > 0.15;                        // mostly success
+            if (card.startsWith("4242")) return true;
+            if (card.startsWith("4000")) return false;
+            return Math.random() > 0.15;
         }
-        // For other methods, 85% success rate for demo
         return Math.random() > 0.15;
     }
 
@@ -1259,7 +1299,7 @@ public class RailwayApp extends Application {
                     if (ok) {
                         refreshBookingsView();
                         updateStatus();
-                        if (resultsListView != null) resultsListView.refresh();
+                        if (resultsListView != null) performSearch();
                     }
                 }
             });
@@ -1312,7 +1352,7 @@ public class RailwayApp extends Application {
                             dataService.cancelBooking(b.getPnr());
                             refreshBookingsView();
                             updateStatus();
-                            if (resultsListView != null) resultsListView.refresh();
+                            if (resultsListView != null) performSearch();
                         }
                     });
                 });
@@ -1369,6 +1409,10 @@ public class RailwayApp extends Application {
         addBtn.getStyleClass().add("primary-button");
 
         addBtn.setOnAction(e -> {
+            if (!"admin".equalsIgnoreCase(currentUserRole)) {
+                showAlert(Alert.AlertType.WARNING, "Access Denied", "Admin only.");
+                return;
+            }
             try {
                 Map<String, Integer> seats = new LinkedHashMap<>();
                 seats.put("SL", Integer.parseInt(slF.getText().trim()));
@@ -1406,7 +1450,7 @@ public class RailwayApp extends Application {
         HBox adminActions = new HBox(8, addBtn, reloadBtn);
 
         // Current trains table (simple ListView for admin too for consistency)
-        ListView<Train> adminList = new ListView<>();
+        adminListView = new ListView<>();
         adminList.setPrefHeight(280);
         adminList.setCellFactory(lv -> new ListCell<>() {
             @Override
@@ -1438,10 +1482,8 @@ public class RailwayApp extends Application {
     }
 
     private void refreshAdminTable() {
-        // Since admin tab uses local ListView, we can find it but for simplicity just reload data
-        // In real would use better architecture; here we refresh search results if open
-        if (resultsListView != null) {
-            resultsListView.refresh();
+        if (adminListView != null) {
+            adminListView.setItems(FXCollections.observableArrayList(dataService.getAllTrains()));
         }
     }
 
