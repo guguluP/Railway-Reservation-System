@@ -53,6 +53,16 @@ public class RailwayApp extends Application {
     private Stage primaryStage;
     private MenuButton profileMenu;
 
+    private StackPane mainContentArea;
+    private Node searchView;
+    private Node bookingsView;
+    private Node adminView;
+    private Label resultsCountLabel;
+    private Label searchLoadingLabel;
+    private ComboBox<String> sortCombo;
+    private boolean isDarkTheme = true;
+    private BorderPane mainRoot;
+
     private static final List<String> CLASS_OPTIONS = List.of("SL", "3A", "2A", "1A", "2S", "CC", "EC", "P");
 
     @Override
@@ -61,12 +71,12 @@ public class RailwayApp extends Application {
         dataService.load();
         dataService.registerOrUpdateUser(currentUser);
 
-        BorderPane root = new BorderPane();
-        root.setTop(buildIRCTCHeader());
-        root.setCenter(buildMainContent());
-        root.setBottom(buildStatusBar());
+        mainRoot = new BorderPane();
+        mainRoot.setTop(buildIRCTCHeader());
+        mainRoot.setCenter(buildMainContent());
+        mainRoot.setBottom(buildStatusBar());
 
-        Scene scene = new Scene(root, 1100, 740);
+        Scene scene = new Scene(mainRoot, 1100, 740);
         var cssUrl = getClass().getResource("/styles/railway-reservation.css");
         if (cssUrl != null) {
             scene.getStylesheets().add(cssUrl.toExternalForm());
@@ -136,7 +146,10 @@ public class RailwayApp extends Application {
             refreshBookingsView();
         });
         profileMenu.getItems().addAll(changeUserItem, myBookingsItem, adminItem, refreshItem, new SeparatorMenuItem(), logoutItem);
-        HBox rightBox = new HBox(8, lang, profileMenu);
+        Button themeToggle = new Button("🌓");
+        themeToggle.getStyleClass().add("nav-link");
+        themeToggle.setOnAction(e -> toggleTheme());
+        HBox rightBox = new HBox(8, lang, themeToggle, profileMenu);
         rightBox.setAlignment(Pos.CENTER_RIGHT);
         header.getChildren().addAll(leftBox, nav, centerGrow, rightBox);
         return header;
@@ -200,15 +213,65 @@ public class RailwayApp extends Application {
     }
 
     private Node buildMainContent() {
-        tabPane = new TabPane();
-        tabPane.setTabClosingPolicy(TabPane.TabClosingPolicy.UNAVAILABLE);
+        searchView = buildSearchView();
+        bookingsView = buildBookingsView();
+        adminView = buildAdminView();
 
-        Tab searchTab = new Tab("🔍 Search & Book Trains", buildSearchTab());
-        Tab bookingsTab = new Tab("🎫 My Bookings", buildBookingsTab());
-        Tab adminTab = new Tab("🛠️ Manage Trains", buildAdminTab());
+        mainContentArea = new StackPane(searchView);
 
-        tabPane.getTabs().addAll(searchTab, bookingsTab, adminTab);
-        return tabPane;
+        VBox sidebar = buildSidebar();
+
+        HBox mainLayout = new HBox();
+        mainLayout.getChildren().addAll(sidebar, mainContentArea);
+        HBox.setHgrow(mainContentArea, Priority.ALWAYS);
+
+        return mainLayout;
+    }
+
+    private VBox buildSidebar() {
+        VBox sidebar = new VBox(4);
+        sidebar.setPrefWidth(200);
+        sidebar.getStyleClass().add("sidebar");
+
+        Button btnSearch = createNavButton("🚂  Search Trains", true);
+        btnSearch.setOnAction(e -> switchToView(searchView));
+
+        Button btnBookings = createNavButton("🎫  My Bookings", false);
+        btnBookings.setOnAction(e -> switchToView(bookingsView));
+
+        Button btnAdmin = createNavButton("🛠️  Manage Trains", false);
+        btnAdmin.setOnAction(e -> switchToView(adminView));
+
+        Region spacer = new Region();
+        VBox.setVgrow(spacer, Priority.ALWAYS);
+
+        sidebar.getChildren().addAll(btnSearch, btnBookings, btnAdmin, spacer);
+        return sidebar;
+    }
+
+    private Button createNavButton(String text, boolean active) {
+        Button btn = new Button(text);
+        btn.setMaxWidth(Double.MAX_VALUE);
+        btn.getStyleClass().add("nav-button");
+        if (active) btn.getStyleClass().add("nav-button-active");
+        return btn;
+    }
+
+    private void switchToView(Node view) {
+        mainContentArea.getChildren().clear();
+        mainContentArea.getChildren().add(view);
+    }
+
+    private Node buildSearchView() {
+        return buildSearchTab();
+    }
+
+    private Node buildBookingsView() {
+        return buildBookingsTab();
+    }
+
+    private Node buildAdminView() {
+        return buildAdminTab();
     }
 
     private Node buildSearchTab() {
@@ -254,6 +317,12 @@ public class RailwayApp extends Application {
             String t = fromBox.getValue();
             fromBox.setValue(toBox.getValue());
             toBox.setValue(t);
+            javafx.animation.ScaleTransition st = new javafx.animation.ScaleTransition(javafx.util.Duration.millis(120), swapBtn);
+            st.setFromX(1.0); st.setFromY(1.0);
+            st.setToX(0.7); st.setToY(0.7);
+            st.setAutoReverse(true);
+            st.setCycleCount(2);
+            st.play();
         });
         Label dateLbl = new Label("📅 Journey Date");
         dateLbl.getStyleClass().add("irctc-label");
@@ -263,9 +332,20 @@ public class RailwayApp extends Application {
         gp.add(toIconLbl, 3, 0);
         gp.add(toBox, 4, 0);
         gp.add(dateLbl, 0, 1);
-        HBox dateBox = new HBox(6, datePicker, addReturnCheck, returnDatePicker);
-        dateBox.setAlignment(Pos.CENTER_LEFT);
-        gp.add(dateBox, 1, 1, 4, 1);
+        Button todayBtn = new Button("Today");
+        todayBtn.getStyleClass().add("quick-date-btn");
+        todayBtn.setOnAction(e -> datePicker.setValue(LocalDate.now()));
+        Button tomorrowBtn = new Button("Tomorrow");
+        tomorrowBtn.getStyleClass().add("quick-date-btn");
+        tomorrowBtn.setOnAction(e -> datePicker.setValue(LocalDate.now().plusDays(1)));
+        Button plus2Btn = new Button("+2 Days");
+        plus2Btn.getStyleClass().add("quick-date-btn");
+        plus2Btn.setOnAction(e -> datePicker.setValue(LocalDate.now().plusDays(2)));
+        HBox quickDates = new HBox(4, todayBtn, tomorrowBtn, plus2Btn);
+        quickDates.setAlignment(Pos.CENTER_LEFT);
+        VBox dateControls = new VBox(4, quickDates, new HBox(6, datePicker, addReturnCheck, returnDatePicker));
+        dateControls.setAlignment(Pos.CENTER_LEFT);
+        gp.add(dateControls, 1, 1, 4, 1);
         classCombo = new ComboBox<>();
         classCombo.getItems().addAll("All Classes", "Sleeper (SL)", "AC 3 Tier (3A)", "AC 2 Tier (2A)", "AC First (1A)", "Chair Car (CC)", "Second Sitting (2S)", "Executive (EC)", "General (P)");
         classCombo.setValue("All Classes");
@@ -296,11 +376,24 @@ public class RailwayApp extends Application {
         card.getChildren().add(searchBtn);
         Label resultsTitle = new Label("Available Trains");
         resultsTitle.getStyleClass().add("irctc-section-title");
+        resultsCountLabel = new Label("");
+        resultsCountLabel.getStyleClass().add("results-count");
+        searchLoadingLabel = new Label("");
+        searchLoadingLabel.getStyleClass().add("search-loading");
+        sortCombo = new ComboBox<>();
+        sortCombo.getItems().addAll("Departure Time", "Cheapest", "Most Seats");
+        sortCombo.setValue("Departure Time");
+        sortCombo.setPrefWidth(130);
+        sortCombo.getStyleClass().add("sort-combo");
+        sortCombo.setOnAction(e -> applyResultsSort());
+        HBox resultsHeader = new HBox(resultsTitle, resultsCountLabel, searchLoadingLabel, sortCombo);
+        resultsHeader.setAlignment(Pos.CENTER_LEFT);
+        HBox.setHgrow(resultsCountLabel, Priority.ALWAYS);
         resultsListView = new ListView<>();
         resultsListView.setPrefHeight(380);
         resultsListView.setCellFactory(createTrainCellFactory());
         VBox.setVgrow(resultsListView, Priority.ALWAYS);
-        container.getChildren().addAll(heroBox, card, resultsTitle, resultsListView);
+        container.getChildren().addAll(heroBox, card, resultsHeader, resultsListView);
         return container;
     }
 
@@ -336,6 +429,10 @@ public class RailwayApp extends Application {
                 for (Map.Entry<String, Integer> e : train.getAvailableSeats().entrySet()) {
                     Label pill = new Label(e.getKey() + ": " + e.getValue());
                     pill.getStyleClass().add("availability-pill");
+                    int cnt = e.getValue() != null ? e.getValue() : 0;
+                    if (cnt > 50) pill.setStyle("-fx-background-color:#22c55e; -fx-text-fill:white;");
+                    else if (cnt > 10) pill.setStyle("-fx-background-color:#f59e0b; -fx-text-fill:white;");
+                    else pill.setStyle("-fx-background-color:#ef4444; -fx-text-fill:white;");
                     pills.getChildren().add(pill);
                 }
 
@@ -378,6 +475,7 @@ public class RailwayApp extends Application {
             showAlert(Alert.AlertType.WARNING, "Missing Info", "Please enter From and To stations.");
             return;
         }
+        if (searchLoadingLabel != null) searchLoadingLabel.setText("  ⏳ Searching...");
         List<Train> results = dataService.searchTrains(from, to, date);
         String clsDisplay = (classCombo != null) ? classCombo.getValue() : "All Classes";
         boolean onlyAvail = (availableSeatsOnlyCheck != null) && availableSeatsOnlyCheck.isSelected();
@@ -396,10 +494,35 @@ public class RailwayApp extends Application {
             }
         }
         resultsListView.setItems(FXCollections.observableArrayList(results));
+        if (resultsCountLabel != null) {
+            resultsCountLabel.setText(results.size() + " trains found");
+        }
+        if (searchLoadingLabel != null) searchLoadingLabel.setText("");
         if (results.isEmpty()) {
             showAlert(Alert.AlertType.INFORMATION, "No Trains Found", "No matching trains for the selected route.");
         }
         updateStatus();
+        applyResultsSort();
+    }
+
+    private void applyResultsSort() {
+        if (resultsListView == null || sortCombo == null) return;
+        ObservableList<Train> items = resultsListView.getItems();
+        if (items == null || items.isEmpty()) return;
+        String sort = sortCombo.getValue();
+        List<Train> sorted = new ArrayList<>(items);
+        if ("Cheapest".equals(sort)) {
+            sorted.sort(Comparator.comparingDouble(Train::getBaseFare));
+        } else if ("Most Seats".equals(sort)) {
+            sorted.sort((a, b) -> {
+                int sumA = a.getAvailableSeats().values().stream().mapToInt(Integer::intValue).sum();
+                int sumB = b.getAvailableSeats().values().stream().mapToInt(Integer::intValue).sum();
+                return Integer.compare(sumB, sumA);
+            });
+        } else {
+            sorted.sort(Comparator.comparing(Train::getDeparture, Comparator.nullsLast(Comparator.naturalOrder())));
+        }
+        resultsListView.setItems(FXCollections.observableArrayList(sorted));
     }
 
     private void openBookingDialog(Train train) {
@@ -412,9 +535,18 @@ public class RailwayApp extends Application {
         dialog.initOwner(primaryStage);
         dialog.setTitle("Book Ticket • " + train.getTrainNo());
 
-        VBox root = new VBox(14);
-        root.setPadding(new Insets(20));
+        VBox root = new VBox(10);
+        root.setPadding(new Insets(16));
         root.getStyleClass().add("booking-dialog");
+
+        // Wizard header
+        HBox wizardHeader = new HBox(10);
+        wizardHeader.setAlignment(Pos.CENTER_LEFT);
+        Label stepLabel = new Label("Step 1/4: Class & Passengers");
+        stepLabel.getStyleClass().add("wizard-step");
+        ProgressBar progressBar = new ProgressBar(0.25);
+        progressBar.setPrefWidth(180);
+        wizardHeader.getChildren().addAll(stepLabel, progressBar);
 
         HBox summary = new HBox(10);
         summary.getStyleClass().add("train-summary");
@@ -580,6 +712,25 @@ public class RailwayApp extends Application {
 
         HBox actions = new HBox(10);
         actions.setAlignment(Pos.CENTER_RIGHT);
+        Button backBtn = new Button("← Back");
+        backBtn.getStyleClass().add("secondary-button");
+        Button nextBtn = new Button("Next →");
+        nextBtn.getStyleClass().add("primary-button");
+        int[] currentStep = {1};
+        nextBtn.setOnAction(ev -> {
+            currentStep[0]++;
+            if (currentStep[0] > 4) currentStep[0] = 4;
+            stepLabel.setText("Step " + currentStep[0] + "/4: " + (currentStep[0] == 1 ? "Class & Passengers" : currentStep[0] == 2 ? "Seat Selection" : currentStep[0] == 3 ? "Passenger Details" : "Review & Confirm"));
+            progressBar.setProgress(currentStep[0] / 4.0);
+            if (currentStep[0] == 4) nextBtn.setText("💳 Proceed to Pay");
+        });
+        backBtn.setOnAction(ev -> {
+            currentStep[0]--;
+            if (currentStep[0] < 1) currentStep[0] = 1;
+            stepLabel.setText("Step " + currentStep[0] + "/4: " + (currentStep[0] == 1 ? "Class & Passengers" : currentStep[0] == 2 ? "Seat Selection" : currentStep[0] == 3 ? "Passenger Details" : "Review & Confirm"));
+            progressBar.setProgress(currentStep[0] / 4.0);
+            if (currentStep[0] < 4) nextBtn.setText("Next →");
+        });
         Button cancelBtn = new Button("Cancel");
         cancelBtn.getStyleClass().add("secondary-button");
         Button confirmBtn = new Button("💳 Proceed to Pay");
@@ -615,16 +766,28 @@ public class RailwayApp extends Application {
 
             double fare = dataService.calculateFare(train, selectedClass, num);
 
-            // Close booking details dialog and open payment gateway (Phase 3)
+            // Close booking details dialog and open payment gateway
             dialog.close();
             Platform.runLater(() -> openPaymentGateway(train, selectedClass, num, paxList, jDate, fare));
         });
 
         cancelBtn.setOnAction(e -> dialog.close());
 
-        actions.getChildren().addAll(cancelBtn, confirmBtn);
+        // Wizard navigation wiring (basic for now)
+        nextBtn.setOnAction(ev -> {
+            if (currentStep[0] < 4) {
+                currentStep[0]++;
+                stepLabel.setText("Step " + currentStep[0] + "/4: " + (currentStep[0] == 1 ? "Class & Passengers" : currentStep[0] == 2 ? "Seat Selection" : currentStep[0] == 3 ? "Passenger Details" : "Review & Confirm"));
+                progressBar.setProgress(currentStep[0] / 4.0);
+            } else {
+                confirmBtn.fire();
+            }
+        });
+
+        actions.getChildren().addAll(backBtn, nextBtn, cancelBtn, confirmBtn);
 
         root.getChildren().addAll(
+            wizardHeader,
             new Label("Booking for: " + currentUser),
             summary,
             classRow,
@@ -993,6 +1156,14 @@ public class RailwayApp extends Application {
         Label title = new Label("Your Bookings");
         title.getStyleClass().add("section-title");
 
+        ComboBox<String> filterBox = new ComboBox<>();
+        filterBox.getItems().addAll("All", "Upcoming", "Past");
+        filterBox.setValue("All");
+        filterBox.setOnAction(e -> refreshBookingsView());
+
+        HBox filterRow = new HBox(8, new Label("Filter:"), filterBox);
+        filterRow.setAlignment(Pos.CENTER_LEFT);
+
         bookingsListView = new ListView<>();
         bookingsListView.setPrefHeight(480);
         bookingsListView.setCellFactory(createBookingCellFactory());
@@ -1018,7 +1189,7 @@ public class RailwayApp extends Application {
             });
         });
 
-        container.getChildren().addAll(title, bookingsListView, cancelSelected);
+        container.getChildren().addAll(title, filterRow, bookingsListView, cancelSelected);
         VBox.setVgrow(bookingsListView, Priority.ALWAYS);
 
         // Initial load
@@ -1280,5 +1451,16 @@ public class RailwayApp extends Application {
 
     public static void main(String[] args) {
         launch(args);
+    }
+
+    private void toggleTheme() {
+        isDarkTheme = !isDarkTheme;
+        if (mainRoot != null) {
+            if (isDarkTheme) {
+                mainRoot.setStyle("-fx-background-color: #0a192f;");
+            } else {
+                mainRoot.setStyle("-fx-background-color: #f8f9fa;");
+            }
+        }
     }
 }

@@ -655,11 +655,23 @@
     -fx-font-size: 12px;
 }
 .irctc-main .train-card {
-    -fx-background-color: #fff;
+    -fx-background-color: #ffffff;
     -fx-border-color: #d1d9e0;
     -fx-border-width: 1;
-    -fx-background-radius: 6;
-    -fx-padding: 8;
+    -fx-background-radius: 10;
+    -fx-padding: 12;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.08), 8, 0.2, 0, 2);
+}
+.booking-dialog {
+    -fx-background-color: #f8f9fa;
+    -fx-background-radius: 12;
+}
+.train-summary {
+    -fx-background-color: white;
+    -fx-background-radius: 8;
+    -fx-padding: 10;
+    -fx-border-color: #e0e7ff;
+    -fx-border-radius: 8;
 }
 .irctc-main .train-name {
     -fx-text-fill: #003366;
@@ -735,4 +747,50 @@
 .search-card .combo-box .arrow,
 .irctc-main .combo-box .arrow {
     -fx-background-color: #0066b3;
+}
+.sidebar {
+    -fx-background-color: #003366;
+    -fx-padding: 12 8;
+    -fx-border-color: #002244;
+    -fx-border-width: 0 2 0 0;
+}
+.nav-button {
+    -fx-background-color: transparent;
+    -fx-text-fill: #cce0ff;
+    -fx-font-size: 13px;
+    -fx-padding: 10 16;
+    -fx-alignment: CENTER_LEFT;
+    -fx-background-radius: 6;
+    -fx-cursor: hand;
+}
+.nav-button:hover {
+    -fx-background-color: #004080;
+    -fx-text-fill: white;
+}
+.nav-button-active {
+    -fx-background-color: #0066b3;
+    -fx-text-fill: white;
+    -fx-font-weight: bold;
+}
+.results-count {
+    -fx-text-fill: #0066b3;
+    -fx-font-size: 13px;
+    -fx-padding: 2 0 0 12;
+}
+.quick-date-btn {
+    -fx-background-color: #e8f4fc;
+    -fx-text-fill: #0066b3;
+    -fx-font-size: 11px;
+    -fx-padding: 2 8;
+    -fx-background-radius: 4;
+    -fx-cursor: hand;
+}
+.quick-date-btn:hover {
+    -fx-background-color: #0066b3;
+    -fx-text-fill: white;
+}
+.search-loading {
+    -fx-text-fill: #ff6b00;
+    -fx-font-size: 12px;
+    -fx-padding: 4 0 0 8;
 }
