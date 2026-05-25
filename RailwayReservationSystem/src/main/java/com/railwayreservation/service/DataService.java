@@ -331,6 +331,10 @@ public class DataService {
         if (from == null || to == null || from.isBlank() || to.isBlank()) {
             return new ArrayList<>();
         }
+        // Phase 1 defense: reject past dates server-side (checklist #4)
+        if (date != null && date.isBefore(java.time.LocalDate.now())) {
+            return new ArrayList<>();
+        }
         String f = resolveStation(from).toLowerCase();
         String t = resolveStation(to).toLowerCase();
 
@@ -430,6 +434,13 @@ public class DataService {
                               String paymentMethod, String transactionId, List<String> seatNumbers) {
         if (!VALID_CLASSES.contains(cls) || !train.hasAvailability(cls, numSeats) || passengers.size() != numSeats) {
             return false;
+        }
+
+        // Phase 1 defense-in-depth (checklist #5): re-validate all passengers even if UI passed
+        for (Passenger p : passengers) {
+            if (p == null || !p.validate().isEmpty()) {
+                return false;
+            }
         }
 
         // Attempt atomic decrement

@@ -178,3 +178,15 @@ Built with ❤️ for coding practice — demonstrating strong JavaFX UI skills 
 - A11y: high-contrast mode, better labels
 
 All changes in single file + CSS. `mvn clean compile` clean.
+
+## 🛡️ UI Logic Fixes (2026-05-25, Task 1779688109262-sunny-wizard)
+
+- **Date bounds (#4)**: `dayCellFactory` on both DatePickers (disable <today, >+1yr); quick-btns fixed; guards in `performSearch` + before `openBookingDialog` + service-side in searchTrains. Past/far-future blocked.
+- **Passenger validation (#5)**: Enforce non-blank name + 1-120 age in both collection paths; call `Passenger.validate()` on submit (per-pax alerts); defense in `DataService.bookTicket`.
+- **Seat availability (extra)**: Simplified `rebuildSeats` to rely solely on `Train.availableSeats` (removed broken date-blind `getAllBookings` stream that mixed past/cancelled → desync).
+- **Wizard (#1 analog)**: Removed misleading non-functional chrome (`stepLabel`, `progressBar`, `backBtn`/`nextBtn` handlers, `currentStep`); booking dialog is explicit single-screen (per original design).
+- **Class ghost (#2)**: `classCombo` now always filters results (unconditional); listener auto-triggers search; preselect mismatch note in dialog.
+- **Copy pax (#5)**: Rewrote buggy handler (was reading size-1 twice, wrong source); now finds penultimate row via reverse scan + userData map, copies reliably to last.
+- No CLI issues (#1,3) apply (pure JavaFX event-driven; all modals have explicit Cancel; no recursion).
+
+`mvn clean compile` clean. Manual flows (dates, bad pax, class mismatch, seats post-book) now robust. See plan for edge tests.

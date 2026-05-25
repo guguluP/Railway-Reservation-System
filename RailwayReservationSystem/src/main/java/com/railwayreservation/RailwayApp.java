@@ -615,6 +615,32 @@ public class RailwayApp extends Application {
         returnDatePicker.setPrefWidth(150);
         returnDatePicker.setVisible(false);
         returnDatePicker.setManaged(false);
+        // Phase 1 fix: enforce date bounds (no past, max 1yr future) per plan checklist #4
+        datePicker.setDayCellFactory(picker -> new DateCell() {
+            @Override public void updateItem(LocalDate date, boolean empty) {
+                super.updateItem(date, empty);
+                LocalDate today = LocalDate.now();
+                boolean bad = empty || date.isBefore(today) || date.isAfter(today.plusYears(1));
+                setDisable(bad);
+                if (bad && !empty) setStyle("-fx-background-color: #fee2e2;");
+            }
+        });
+        returnDatePicker.setDayCellFactory(picker -> new DateCell() {
+            @Override public void updateItem(LocalDate date, boolean empty) {
+                super.updateItem(date, empty);
+                LocalDate min = (datePicker.getValue() != null ? datePicker.getValue().plusDays(1) : LocalDate.now().plusDays(1));
+                LocalDate max = LocalDate.now().plusYears(1);
+                boolean bad = empty || date.isBefore(min) || date.isAfter(max);
+                setDisable(bad);
+                if (bad && !empty) setStyle("-fx-background-color: #fee2e2;");
+            }
+        });
+        // keep return date >= journey + 1
+        datePicker.valueProperty().addListener((obs, oldVal, newVal) -> {
+            if (newVal != null && returnDatePicker.getValue() != null && !returnDatePicker.getValue().isAfter(newVal)) {
+                returnDatePicker.setValue(newVal.plusDays(1));
+            }
+        });
         addReturnCheck = new CheckBox("Return date");
         addReturnCheck.setOnAction(e -> {
             boolean s = addReturnCheck.isSelected();
@@ -646,16 +672,16 @@ public class RailwayApp extends Application {
         gp.add(toIconLbl, 3, 0);
         gp.add(toBox, 4, 0);
         gp.add(dateLbl, 0, 1);
-        Button todayBtn = new Button("Today");
-        todayBtn.getStyleClass().add("quick-date-btn");
-        todayBtn.setOnAction(e -> datePicker.setValue(LocalDate.now()));
-        Button tomorrowBtn = new Button("Tomorrow");
-        tomorrowBtn.getStyleClass().add("quick-date-btn");
-        tomorrowBtn.setOnAction(e -> datePicker.setValue(LocalDate.now().plusDays(1)));
+        Button minDateBtn = new Button("Tomorrow");
+        minDateBtn.getStyleClass().add("quick-date-btn");
+        minDateBtn.setOnAction(e -> datePicker.setValue(LocalDate.now().plusDays(1)));
         Button plus2Btn = new Button("+2 Days");
         plus2Btn.getStyleClass().add("quick-date-btn");
         plus2Btn.setOnAction(e -> datePicker.setValue(LocalDate.now().plusDays(2)));
-        HBox quickDates = new HBox(4, todayBtn, tomorrowBtn, plus2Btn);
+        Button plus7Btn = new Button("+7 Days");
+        plus7Btn.getStyleClass().add("quick-date-btn");
+        plus7Btn.setOnAction(e -> datePicker.setValue(LocalDate.now().plusDays(7)));
+        HBox quickDates = new HBox(4, minDateBtn, plus2Btn, plus7Btn);
         quickDates.setAlignment(Pos.CENTER_LEFT);
         VBox dateControls = new VBox(4, quickDates, new HBox(6, datePicker, addReturnCheck, returnDatePicker));
         dateControls.setAlignment(Pos.CENTER_LEFT);
@@ -664,6 +690,8 @@ public class RailwayApp extends Application {
         classCombo.getItems().addAll("All Classes", "Sleeper (SL)", "AC 3 Tier (3A)", "AC 2 Tier (2A)", "AC First (1A)", "Chair Car (CC)", "Second Sitting (2S)", "Executive (EC)", "General (P)");
         classCombo.setValue("All Classes");
         classCombo.setPrefWidth(180);
+        // Phase 2: live sync class filter - auto re-search on change (eliminates ghost class in results)
+        classCombo.setOnAction(e -> { if (resultsListView != null) performSearch(); });
         quotaCombo = new ComboBox<>();
         quotaCombo.getItems().addAll("General (GN)", "Ladies (LD)", "Lower Berth / Sr. Citizen", "Person with Disability (Divyangjan)", "Tatkal (TQ)", "Premium Tatkal (PT)");
         quotaCombo.setValue("General (GN)");
@@ -827,6 +855,12 @@ public class RailwayApp extends Application {
                                 pref = d.substring(o + 1, c).trim();
                             }
                         }
+                        // Phase 1 guard before booking open (even if date changed post-search)
+                        LocalDate jdt = datePicker.getValue();
+                        if (jdt != null && jdt.isBefore(LocalDate.now())) {
+                            showAlert(Alert.AlertType.WARNING, "Invalid Date", "Cannot book for past date.");
+                            return;
+                        }
                         openBookingDialog(train, pref);
                     });
                 });
@@ -844,6 +878,23 @@ public class RailwayApp extends Application {
         if (from == null || to == null || from.isBlank() || to.isBlank()) {
             showAlert(Alert.AlertType.WARNING, "Missing Info", "Please enter From and To stations.");
             return;
+        }
+        // Phase 1 fix: date bounds guard (checklist #4) - block past/far-future before search
+        if (date != null) {
+            LocalDate today = LocalDate.now();
+            if (date.isBefore(today)) {
+                showAlert(Alert.AlertType.WARNING, "Invalid Date", "Journey date cannot be in the past. Select today or later.");
+                return;
+            }
+            if (date.isAfter(today.plusYears(1))) {
+                showAlert(Alert.AlertType.WARNING, "Invalid Date", "Journey date cannot be more than 1 year ahead.");
+                return;
+            }
+            if (returnDatePicker != null && returnDatePicker.isVisible() && returnDatePicker.getValue() != null
+                    && !returnDatePicker.getValue().isAfter(date)) {
+                showAlert(Alert.AlertType.WARNING, "Invalid Date", "Return date must be after the journey date.");
+                return;
+            }
         }
         if (searchLoadingLabel != null) searchLoadingLabel.setText("  ⏳ Searching...");
         if (searchProgress != null) searchProgress.setVisible(true);
@@ -865,8 +916,8 @@ public class RailwayApp extends Application {
         // Nearby stations (simple hardcoded)
         boolean nearby = false; // placeholder, would need checkbox ref; for demo use flex logic or extend
         String clsDisplay = (classCombo != null) ? classCombo.getValue() : "All Classes";
-        boolean onlyAvail = (availableSeatsOnlyCheck != null) && availableSeatsOnlyCheck.isSelected();
-        if (clsDisplay != null && !clsDisplay.equals("All Classes") && onlyAvail) {
+        // Phase 2: class filter always applied (not gated on onlyAvail) to prevent ghost selections in results list
+        if (clsDisplay != null && !clsDisplay.equals("All Classes")) {
             String code = null;
             if (clsDisplay.contains("(") && clsDisplay.endsWith(")")) {
                 int o = clsDisplay.lastIndexOf('(');
@@ -919,6 +970,12 @@ public class RailwayApp extends Application {
     }
 
     private void openBookingDialog(Train train, String preselectClass) {
+        // Phase 1 date guard (checklist #4)
+        LocalDate jdt = (datePicker != null) ? datePicker.getValue() : null;
+        if (jdt != null && jdt.isBefore(LocalDate.now())) {
+            showAlert(Alert.AlertType.WARNING, "Invalid Date", "Cannot open booking for a past date.");
+            return;
+        }
         Stage dialog = new Stage();
         dialog.initModality(Modality.APPLICATION_MODAL);
         dialog.initOwner(primaryStage);
@@ -928,14 +985,7 @@ public class RailwayApp extends Application {
         root.setPadding(new Insets(16));
         root.getStyleClass().add("booking-dialog");
 
-        // Wizard header
-        HBox wizardHeader = new HBox(10);
-        wizardHeader.setAlignment(Pos.CENTER_LEFT);
-        Label stepLabel = new Label("Step 1/4: Class & Passengers");
-        stepLabel.getStyleClass().add("wizard-step");
-        ProgressBar progressBar = new ProgressBar(0.25);
-        progressBar.setPrefWidth(180);
-        wizardHeader.getChildren().addAll(stepLabel, progressBar);
+        // (Wizard chrome removed in Phase 2 - was non-functional labels/progress only; single-screen form is intentional)
 
         HBox summary = new HBox(10);
         summary.getStyleClass().add("train-summary");
@@ -986,6 +1036,12 @@ public class RailwayApp extends Application {
         if (!didPre) {
             classBtns.get(0).setSelected(true);
         }
+        if (!didPre && preselectClass != null) {
+            // Phase 2 UX: note when search class pref didn't match this train's classes (ghost prevented by dialog)
+            Label note = new Label("⚠ Preferred class '" + preselectClass + "' unavailable on this train");
+            note.setStyle("-fx-font-size:10px; -fx-text-fill:#b45309;");
+            classRow.getChildren().add(note);
+        }
         classRow.getChildren().add(clsLbl);
         classRow.getChildren().addAll(classBtns);
 
@@ -1034,10 +1090,9 @@ public class RailwayApp extends Application {
             seatTitle.setText("IR " + cls + " Coach Map");
 
             int available = (train.getAvailableSeats() != null) ? train.getAvailableSeats().getOrDefault(cls, 0) : 0;
-            int booked = dataService.getAllBookings().stream()
-                    .filter(b -> b.getTrainNo().equals(train.getTrainNo()) && cls.equals(b.getCls()))
-                    .mapToInt(b -> b.getPassengers().size()).sum();
-            int capacity = booked + available;
+            // Phase 1 fix (extra): simplified to Train counts only (authoritative source; old query was date-blind, included past/cancelled -> desync bug)
+            // Grid now reflects live remaining seats for the train (decremented on book, restored on cancel). No fake booked overlay.
+            int capacity = available;
 
             if (capacity <= 0) {
                 Label none = new Label("No seats available");
@@ -1052,22 +1107,17 @@ public class RailwayApp extends Application {
                 int c = i % cols;
                 ToggleButton tb = new ToggleButton(cls + (i + 1));
                 tb.setPrefSize(30, 18);
-                if (i < booked) {
-                    tb.getStyleClass().addAll("seat", "seat-booked");
-                    tb.setDisable(true);
-                } else {
-                    tb.getStyleClass().addAll("seat", "seat-available");
-                    // Special quota highlights (demo)
-                    if ((i + 1) % 5 == 0) {
-                        tb.getStyleClass().add("seat-ladies");
-                        tb.setTooltip(new Tooltip("Ladies quota"));
-                    } else if ((i + 1) % 7 == 0) {
-                        tb.getStyleClass().add("seat-senior");
-                        tb.setTooltip(new Tooltip("Senior / Divyangjan priority"));
-                    }
-                    tb.setOnAction(ev -> updateSelectionInfo(selectionInfo, seatToggles, numBox, fareLabel, train, classGroup));
-                    seatToggles.add(tb);
+                tb.getStyleClass().addAll("seat", "seat-available");
+                // Special quota highlights (demo)
+                if ((i + 1) % 5 == 0) {
+                    tb.getStyleClass().add("seat-ladies");
+                    tb.setTooltip(new Tooltip("Ladies quota"));
+                } else if ((i + 1) % 7 == 0) {
+                    tb.getStyleClass().add("seat-senior");
+                    tb.setTooltip(new Tooltip("Senior / Divyangjan priority"));
                 }
+                tb.setOnAction(ev -> updateSelectionInfo(selectionInfo, seatToggles, numBox, fareLabel, train, classGroup));
+                seatToggles.add(tb);
                 seatGrid.add(tb, c, r);
             }
         };
@@ -1084,25 +1134,25 @@ public class RailwayApp extends Application {
             Button copyBtn = new Button("Copy details from previous passenger");
             copyBtn.getStyleClass().add("secondary-button");
             copyBtn.setOnAction(ev -> {
-                if (n > 1 && paxContainer.getChildren().size() > 2) {
-                    HBox prev = (HBox) paxContainer.getChildren().get(paxContainer.getChildren().size()-1);
-                    HBox last = (HBox) paxContainer.getChildren().get(paxContainer.getChildren().size()-1);
-                    // simplistic copy from second last if possible
-                    if (paxContainer.getChildren().size() > 2) {
-                        HBox secondLast = (HBox) paxContainer.getChildren().get(paxContainer.getChildren().size()-2);
-                        Object ud = secondLast.getUserData();
-                        if (ud instanceof java.util.Map) {
-                            java.util.Map<?,?> m = (java.util.Map<?,?>) ud;
-                            TextField pn = (TextField) m.get("name");
-                            if (last.getUserData() instanceof java.util.Map) {
-                                java.util.Map<?,?> lm = (java.util.Map<?,?>) last.getUserData();
-                                ((TextField)lm.get("name")).setText(pn.getText());
-                                ((TextField)lm.get("age")).setText(((TextField)m.get("age")).getText());
-                                ((ComboBox)lm.get("gender")).setValue(((ComboBox)m.get("gender")).getValue());
-                                ((ComboBox)lm.get("berth")).setValue(((ComboBox)m.get("berth")).getValue());
-                            }
-                        }
+                // Phase 2 fix: properly copy from previous (penultimate) pax row to last row using userData map only
+                var children = paxContainer.getChildren();
+                if (children.size() < 4) return; // title + copy + at least 2 rows
+                HBox source = null;
+                HBox target = null;
+                for (int i = children.size() - 1; i >= 0; i--) {
+                    Object c = children.get(i);
+                    if (c instanceof HBox h && h.getUserData() instanceof java.util.Map) {
+                        if (target == null) target = h;
+                        else if (source == null) { source = h; break; }
                     }
+                }
+                if (source != null && target != null && source != target) {
+                    java.util.Map<?,?> sm = (java.util.Map<?,?>) source.getUserData();
+                    java.util.Map<?,?> tm = (java.util.Map<?,?>) target.getUserData();
+                    ((TextField) tm.get("name")).setText(((TextField) sm.get("name")).getText());
+                    ((TextField) tm.get("age")).setText(((TextField) sm.get("age")).getText());
+                    ((ComboBox) tm.get("gender")).setValue(((ComboBox) sm.get("gender")).getValue());
+                    ((ComboBox) tm.get("berth")).setValue(((ComboBox) sm.get("berth")).getValue());
                 }
             });
             paxContainer.getChildren().add(copyBtn);
@@ -1148,23 +1198,12 @@ public class RailwayApp extends Application {
 
         HBox actions = new HBox(10);
         actions.setAlignment(Pos.CENTER_RIGHT);
-        Button backBtn = new Button("← Back");
-        backBtn.getStyleClass().add("secondary-button");
-        Button nextBtn = new Button("Next →");
-        nextBtn.getStyleClass().add("primary-button");
-        int[] currentStep = {1};
-
-        backBtn.setOnAction(ev -> {
-            currentStep[0]--;
-            if (currentStep[0] < 1) currentStep[0] = 1;
-            stepLabel.setText("Step " + currentStep[0] + "/4: " + (currentStep[0] == 1 ? "Class & Passengers" : currentStep[0] == 2 ? "Seat Selection" : currentStep[0] == 3 ? "Passenger Details" : "Review & Confirm"));
-            progressBar.setProgress(currentStep[0] / 4.0);
-            if (currentStep[0] < 4) nextBtn.setText("Next →");
-        });
         Button cancelBtn = new Button("Cancel");
         cancelBtn.getStyleClass().add("secondary-button");
         Button confirmBtn = new Button("💳 Proceed to Pay");
         confirmBtn.getStyleClass().add("primary-button");
+
+        // (back/next wizard navigation removed in Phase 2 - was cosmetic only, no pane switching; all fields always visible)
 
         confirmBtn.setOnAction(e -> {
             String selectedClass = ((ToggleButton) classGroup.getSelectedToggle()).getText();
@@ -1196,7 +1235,22 @@ public class RailwayApp extends Application {
                             showAlert(Alert.AlertType.WARNING, "Invalid Age", "Please enter a valid age for passenger " + (idx+1));
                             return;
                         }
-                        paxList.add(new Passenger(nameF.getText().trim(), ageVal, gC.getValue(), bC.getValue()));
+                        String pName = nameF.getText().trim();
+                        if (pName.isBlank()) {
+                            showAlert(Alert.AlertType.WARNING, "Invalid Passenger " + (idx+1), "Name is required");
+                            return;
+                        }
+                        if (ageVal < 1 || ageVal > 120) {
+                            showAlert(Alert.AlertType.WARNING, "Invalid Passenger " + (idx+1), "Age must be 1–120");
+                            return;
+                        }
+                        Passenger p = new Passenger(pName, ageVal, gC.getValue(), bC.getValue());
+                        List<String> errs = p.validate();
+                        if (!errs.isEmpty()) {
+                            showAlert(Alert.AlertType.WARNING, "Invalid Passenger " + (idx+1), String.join("; ", errs));
+                            return;
+                        }
+                        paxList.add(p);
                     } else {
                         // fallback to older index-based parsing
                         TextField nameF = (TextField) row.getChildren().get(1);
@@ -1210,7 +1264,22 @@ public class RailwayApp extends Application {
                             showAlert(Alert.AlertType.WARNING, "Invalid Age", "Please enter a valid age for passenger " + (idx+1));
                             return;
                         }
-                        paxList.add(new Passenger(nameF.getText().trim(), ageVal, gC.getValue(), bC.getValue()));
+                        String pName = nameF.getText().trim();
+                        if (pName.isBlank()) {
+                            showAlert(Alert.AlertType.WARNING, "Invalid Passenger " + (idx+1), "Name is required");
+                            return;
+                        }
+                        if (ageVal < 1 || ageVal > 120) {
+                            showAlert(Alert.AlertType.WARNING, "Invalid Passenger " + (idx+1), "Age must be 1–120");
+                            return;
+                        }
+                        Passenger p = new Passenger(pName, ageVal, gC.getValue(), bC.getValue());
+                        List<String> errs = p.validate();
+                        if (!errs.isEmpty()) {
+                            showAlert(Alert.AlertType.WARNING, "Invalid Passenger " + (idx+1), String.join("; ", errs));
+                            return;
+                        }
+                        paxList.add(p);
                     }
                     idx++;
                     if (idx >= num) break;
@@ -1231,18 +1300,7 @@ public class RailwayApp extends Application {
 
         cancelBtn.setOnAction(e -> dialog.close());
 
-        // Wizard navigation wiring (basic for now)
-        nextBtn.setOnAction(ev -> {
-            if (currentStep[0] < 4) {
-                currentStep[0]++;
-                stepLabel.setText("Step " + currentStep[0] + "/4: " + (currentStep[0] == 1 ? "Class & Passengers" : currentStep[0] == 2 ? "Seat Selection" : currentStep[0] == 3 ? "Passenger Details" : "Review & Confirm"));
-                progressBar.setProgress(currentStep[0] / 4.0);
-            } else {
-                confirmBtn.fire();
-            }
-        });
-
-        actions.getChildren().addAll(backBtn, nextBtn, cancelBtn, confirmBtn);
+        actions.getChildren().addAll(cancelBtn, confirmBtn);
 
         // Berth legend (Phase 3)
         HBox berthLegend = new HBox(10);
@@ -1256,7 +1314,6 @@ public class RailwayApp extends Application {
         }
 
         root.getChildren().addAll(
-            wizardHeader,
             new Label("Booking for: " + currentUser),
             summary,
             classRow,
