@@ -116,12 +116,7 @@ public class RailwayApp extends Application {
         mainRoot.setBottom(buildStatusBar());
 
         Scene scene = new Scene(mainRoot, 1100, 740);
-        var cssUrl = getClass().getResource("/styles/railway-reservation.css");
-        if (cssUrl != null) {
-            scene.getStylesheets().add(cssUrl.toExternalForm());
-        } else {
-            System.out.println("⚠️ CSS not found at /styles/railway-reservation.css — UI will be unstyled");
-        }
+        loadStylesheet(scene);
 
         primaryStage.setTitle("IRCTC Rail Connect • Book Train Tickets");
         primaryStage.setScene(scene);
@@ -1326,8 +1321,7 @@ public class RailwayApp extends Application {
         );
 
         Scene dialogScene = new Scene(root, 720, 620);
-        var css = getClass().getResource("/styles/railway-reservation.css");
-        if (css != null) dialogScene.getStylesheets().add(css.toExternalForm());
+        loadStylesheet(dialogScene);
         dialog.setScene(dialogScene);
         dialog.showAndWait();
     }
@@ -1385,8 +1379,7 @@ public class RailwayApp extends Application {
 
         box.getChildren().addAll(title, pnrLabel, details, close);
         Scene sc = new Scene(box, 480, 260);
-        var css = getClass().getResource("/styles/railway-reservation.css");
-        if (css != null) sc.getStylesheets().add(css.toExternalForm());
+        loadStylesheet(sc);
         success.setScene(sc);
         success.showAndWait();
     }
@@ -1615,8 +1608,7 @@ public class RailwayApp extends Application {
         root.getChildren().addAll(header, sub, methodBar, formArea, amountLabel, secure, actions);
 
         Scene scene = new Scene(root, 620, 520);
-        var cssUrl = getClass().getResource("/styles/railway-reservation.css");
-        if (cssUrl != null) scene.getStylesheets().add(cssUrl.toExternalForm());
+        loadStylesheet(scene);
         payDialog.setScene(scene);
         payDialog.showAndWait();
     }
@@ -1700,8 +1692,7 @@ public class RailwayApp extends Application {
         box.getChildren().addAll(title, txn, details, btns);
 
         Scene sc = new Scene(box, 460, 280);
-        var css = getClass().getResource("/styles/railway-reservation.css");
-        if (css != null) sc.getStylesheets().add(css.toExternalForm());
+        loadStylesheet(sc);
         receipt.setScene(sc);
         receipt.showAndWait();
     }
@@ -2038,8 +2029,7 @@ public class RailwayApp extends Application {
         box.getChildren().addAll(title, stopsList, note);
 
         Scene scene = new Scene(box, 420, 480);
-        var cssUrl = getClass().getResource("/styles/railway-reservation.css");
-        if (cssUrl != null) scene.getStylesheets().add(cssUrl.toExternalForm());
+        loadStylesheet(scene);
         routeDialog.setScene(scene);
         routeDialog.showAndWait();
     }
@@ -2050,6 +2040,22 @@ public class RailwayApp extends Application {
         a.setHeaderText(null);
         a.setContentText(msg);
         a.showAndWait();
+    }
+
+    /** Centralized CSS loader (addresses review: safety, no duplication across main/dialogs). */
+    private void loadStylesheet(Scene scene) {
+        final String cssPath = "/styles/railway-reservation.css";
+        var cssUrl = getClass().getResource(cssPath);
+        if (cssUrl != null) {
+            scene.getStylesheets().add(cssUrl.toExternalForm());
+        } else {
+            System.err.println("⚠️ CSS not found at " + cssPath + " (classpath resource). UI will be unstyled. Ensure src/main/resources" + cssPath + " exists.");
+            // Fallback attempt (rarely needed): try file: protocol if running from IDE exploded
+            try {
+                java.net.URL fallback = getClass().getResource("styles/railway-reservation.css");
+                if (fallback != null) scene.getStylesheets().add(fallback.toExternalForm());
+            } catch (Exception ignored) {}
+        }
     }
 
     // ==================== PHASE 0 HELPERS ====================
@@ -2262,8 +2268,7 @@ public class RailwayApp extends Application {
         root.setBottom(footer);
 
         Scene scene = new Scene(root, 640, 520);
-        var css = getClass().getResource("/styles/railway-reservation.css");
-        if (css != null) scene.getStylesheets().add(css.toExternalForm());
+        loadStylesheet(scene);
 
         initialLoginStage.setScene(scene);
         initialLoginStage.show();

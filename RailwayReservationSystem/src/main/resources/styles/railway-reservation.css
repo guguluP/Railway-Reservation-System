@@ -916,3 +916,415 @@
 .login-preview-search .label {
     -fx-text-fill: #cbd5e1;
 }
+
+/* ============================================================
+   EXTENDED STYLES: TableView, ListView, Dialog, ComboBox
+   ============================================================ */
+
+/* TableView Styling */
+.table-view {
+    -fx-background-color: #0a192f;
+    -fx-selection-bar: #ff9933;
+    -fx-selection-bar-non-focused: rgba(255,153,51,0.3);
+}
+
+.table-view .column-header,
+.table-view .column-header-background,
+.table-view .filler {
+    -fx-background-color: #112240;
+    -fx-border-color: #1e3a5f;
+    -fx-border-width: 0 0 1 0;
+}
+
+.table-view .column-header .label {
+    -fx-text-fill: #ff9933;
+    -fx-font-weight: bold;
+    -fx-padding: 8 4 8 4;
+}
+
+.table-view .table-row-cell {
+    -fx-padding: 6 0;
+    -fx-border-color: transparent;
+    -fx-background-color: transparent;
+}
+
+.table-view .table-row-cell:hover {
+    -fx-background-color: rgba(255,153,51,0.1);
+    -fx-text-fill: #e2e8f0;
+}
+
+.table-view .table-row-cell:selected {
+    -fx-background-color: rgba(255,153,51,0.25);
+    -fx-text-fill: white;
+}
+
+.table-view .table-row-cell:focused,
+.table-view .table-row-cell:focused:selected {
+    -fx-background-color: rgba(255,153,51,0.3);
+    -fx-padding: 6 0;
+}
+
+.table-view .table-cell {
+    -fx-text-fill: #cbd5e1;
+    -fx-padding: 4 8;
+}
+
+/* ListView Styling */
+.list-view {
+    -fx-background-color: #0a192f;
+    -fx-border-color: #1e3a5f;
+    -fx-border-width: 1;
+    -fx-padding: 0;
+}
+
+.list-view:focused {
+    -fx-border-color: #ff9933;
+    -fx-border-width: 1;
+}
+
+.list-view .list-cell {
+    -fx-padding: 8 12;
+    -fx-background-color: transparent;
+    -fx-text-fill: #cbd5e1;
+    -fx-border-color: transparent;
+    -fx-border-width: 0 0 1 0;
+    -fx-border-color: #1e3a5f;
+}
+
+.list-view .list-cell:hover {
+    -fx-background-color: rgba(255,153,51,0.08);
+}
+
+.list-view .list-cell:selected {
+    -fx-background-color: rgba(255,153,51,0.2);
+    -fx-text-fill: white;
+    -fx-font-weight: 500;
+}
+
+.list-view .list-cell:focused {
+    -fx-background-color: rgba(255,153,51,0.25);
+}
+
+/* ComboBox Styling */
+.combo-box {
+    -fx-background-color: rgba(255,255,255,0.05);
+    -fx-border-color: rgba(255,255,255,0.1);
+    -fx-border-width: 1;
+    -fx-border-radius: 6;
+    -fx-padding: 6 8;
+    -fx-text-fill: #cbd5e1;
+    -fx-prompt-text-fill: #64748b;
+}
+
+.combo-box:focused {
+    -fx-border-color: #ff9933;
+    -fx-border-width: 2;
+}
+
+.combo-box-popup .list-view {
+    -fx-background-color: #112240;
+    -fx-border-color: #ff9933;
+}
+
+.combo-box-popup .list-view .list-cell:selected {
+    -fx-background-color: rgba(255,153,51,0.3);
+    -fx-text-fill: white;
+}
+
+/* DatePicker Styling */
+.date-picker {
+    -fx-background-color: rgba(255,255,255,0.05);
+    -fx-border-color: rgba(255,255,255,0.1);
+    -fx-border-width: 1;
+    -fx-border-radius: 6;
+    -fx-padding: 6;
+}
+
+.date-picker:focused {
+    -fx-border-color: #ff9933;
+    -fx-border-width: 2;
+}
+
+.date-picker-popup {
+    -fx-background-color: #112240;
+    -fx-border-color: #ff9933;
+}
+
+/* TextInputControl (TextArea, TextField, etc.) */
+.text-input-control {
+    -fx-control-inner-background: rgba(255,255,255,0.05);
+    -fx-text-fill: #cbd5e1;
+    -fx-prompt-text-fill: #64748b;
+    -fx-border-color: rgba(255,255,255,0.1);
+    -fx-border-width: 1;
+    -fx-border-radius: 6;
+    -fx-padding: 6 8;
+    -fx-font-family: 'Courier New', monospace;
+    -fx-font-size: 12px;
+}
+
+.text-input-control:focused {
+    -fx-border-color: #ff9933;
+    -fx-border-width: 2;
+    -fx-control-inner-background: rgba(255,255,255,0.08);
+}
+
+/* Dialog (Alert, Custom) */
+.dialog-pane {
+    -fx-background-color: #112240;
+    -fx-border-color: #1e3a5f;
+    -fx-border-width: 1;
+}
+
+.dialog-pane .header-panel {
+    -fx-background-color: linear-gradient(to bottom, #1a2f50, #112240);
+    -fx-text-fill: #ff9933;
+    -fx-padding: 12;
+    -fx-font-weight: bold;
+    -fx-font-size: 14px;
+}
+
+.dialog-pane .label {
+    -fx-text-fill: #cbd5e1;
+}
+
+.dialog-pane .content {
+    -fx-padding: 16;
+}
+
+.dialog-pane:header .header-panel.graphic-container {
+    -fx-padding: 0 12 0 0;
+}
+
+.dialog-pane .button-bar {
+    -fx-padding: 12;
+    -fx-button-min-width: 80px;
+}
+
+/* Scrollbar Styling */
+.scroll-bar {
+    -fx-base: rgba(255,255,255,0.05);
+}
+
+.scroll-bar:vertical .increment-button,
+.scroll-bar:vertical .decrement-button,
+.scroll-bar:horizontal .increment-button,
+.scroll-bar:horizontal .decrement-button {
+    -fx-padding: 0;
+}
+
+.scroll-bar:vertical .thumb,
+.scroll-bar:horizontal .thumb {
+    -fx-background-color: rgba(255,153,51,0.5);
+    -fx-background-radius: 5;
+    -fx-padding: 2;
+}
+
+.scroll-bar:vertical .thumb:hover,
+.scroll-bar:horizontal .thumb:hover {
+    -fx-background-color: rgba(255,153,51,0.7);
+}
+
+/* Tooltip Styling */
+.tooltip {
+    -fx-background-color: rgba(30,58,95,0.95);
+    -fx-text-fill: #e2e8f0;
+    -fx-border-color: #ff9933;
+    -fx-border-width: 1;
+    -fx-border-radius: 6;
+    -fx-padding: 6 8;
+    -fx-font-size: 11px;
+}
+
+/* CheckBox & RadioButton Styling */
+.check-box,
+.radio-button {
+    -fx-text-fill: #cbd5e1;
+}
+
+.check-box .box,
+.radio-button .radio {
+    -fx-border-color: rgba(255,255,255,0.2);
+    -fx-border-width: 1;
+    -fx-background-color: rgba(255,255,255,0.05);
+}
+
+.check-box:selected .box,
+.radio-button:selected .radio {
+    -fx-background-color: #ff9933;
+    -fx-border-color: #ff9933;
+}
+
+.check-box:focused .box,
+.radio-button:focused .radio {
+    -fx-border-color: #ff9933;
+    -fx-border-width: 2;
+}
+
+/* Separator Styling */
+.separator:vertical .line {
+    -fx-border-color: rgba(255,255,255,0.1);
+    -fx-border-width: 0 1 0 0;
+}
+
+.separator:horizontal .line {
+    -fx-border-color: rgba(255,255,255,0.1);
+    -fx-border-width: 0 0 1 0;
+}
+
+/* ============================================================
+   ACCESSIBILITY: High Contrast & Focus Indicators
+   ============================================================ */
+
+.high-contrast .table-view .table-row-cell:selected {
+    -fx-background-color: #ffcc00;
+    -fx-text-fill: #000000;
+}
+
+.high-contrast .list-view .list-cell:selected {
+    -fx-background-color: #ffcc00;
+    -fx-text-fill: #000000;
+}
+
+.high-contrast .primary-button {
+    -fx-text-fill: #000000;
+    -fx-font-weight: bold;
+}
+
+.high-contrast .button:focused {
+    -fx-border-width: 2;
+    -fx-border-color: #ffffff;
+}
+
+.high-contrast .text-input-control {
+    -fx-control-inner-background: #ffffff;
+    -fx-text-fill: #000000;
+    -fx-border-color: #000000;
+    -fx-border-width: 2;
+}
+
+.high-contrast .text-input-control:focused {
+    -fx-border-color: #ffcc00;
+    -fx-border-width: 3;
+}
+
+/* Focus visible for keyboard navigation */
+.button:focused {
+    -fx-effect: dropshadow(gaussian, rgba(255,153,51,0.8), 8, 0.4, 0, 0);
+    -fx-border-color: rgba(255,153,51,0.5);
+    -fx-border-width: 1;
+}
+
+/* Results table specific */
+.results-table {
+    -fx-font-size: 12px;
+}
+
+.results-table .table-row-cell {
+    -fx-padding: 8 0;
+}
+
+.results-count {
+    -fx-text-fill: #ff9933;
+    -fx-font-weight: bold;
+    -fx-font-size: 12px;
+}
+
+.loading-label {
+    -fx-text-fill: #ff9933;
+    -fx-font-weight: bold;
+}
+
+.loading-active {
+    -fx-text-fill: #ffd699;
+    -fx-animation: pulse 1s infinite;
+}
+
+/* No seats message */
+.no-seats {
+    -fx-text-fill: #ef4444;
+    -fx-font-style: italic;
+    -fx-padding: 16;
+}
+
+/* Section titles */
+.section-title-small {
+    -fx-font-size: 12px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #ff9933;
+    -fx-padding: 8 0;
+}
+
+/* Fare label */
+.fare-label {
+    -fx-text-fill: #10b981;
+    -fx-font-weight: bold;
+    -fx-font-size: 13px;
+}
+
+/* ============================================================
+   RESPONSIVE & SCROLL CONTAINER FIXES
+   ============================================================ */
+
+.scroll-pane {
+    -fx-background-color: transparent;
+    -fx-border-color: transparent;
+    -fx-padding: 0;
+}
+
+.scroll-pane:focused {
+    -fx-border-color: transparent;
+}
+
+.scroll-pane .viewport {
+    -fx-background-color: transparent;
+}
+
+/* VBox and HBox adjustments */
+.vbox, .hbox {
+    -fx-spacing: 8;
+}
+
+/* ============================================================
+   LIGHT THEME VARIANT (for future use)
+   ============================================================ */
+
+.light-theme {
+    -fx-base: #f5f5f5;
+}
+
+.light-theme .root {
+    -fx-background-color: #f5f5f5;
+    -fx-text-fill: #1a1a1a;
+}
+
+.light-theme .irctc-header {
+    -fx-background-color: linear-gradient(to bottom, #ffffff, #f0f0f0);
+    -fx-border-color: #e0e0e0;
+}
+
+.light-theme .primary-button {
+    -fx-background-color: #ff9933;
+    -fx-text-fill: #ffffff;
+}
+
+.light-theme .table-view .column-header {
+    -fx-background-color: #e8e8e8;
+}
+
+.light-theme .table-view .table-row-cell:hover {
+    -fx-background-color: rgba(255,153,51,0.15);
+}
+
+.light-theme .list-view {
+    -fx-background-color: #ffffff;
+    -fx-border-color: #d0d0d0;
+}
+
+.light-theme .text-input-control {
+    -fx-control-inner-background: #ffffff;
+    -fx-text-fill: #1a1a1a;
+    -fx-border-color: #d0d0d0;
+}
+
+/* End of CSS */
