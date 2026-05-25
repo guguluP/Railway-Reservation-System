@@ -14,23 +14,12 @@ import java.util.List;
 
 public class BookingRepository {
 
-    private static final String DB_URL = "jdbc:h2:file:" + System.getProperty("user.home") + "/.railway-reservation/railway;AUTO_SERVER=FALSE";
-    private static final String DB_USER = "sa";
-    private static final String DB_PASSWORD = "";
-
     private final ObjectMapper mapper = new ObjectMapper()
             .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
     private final HikariDataSource dataSource;
 
     public BookingRepository() {
-        HikariConfig config = new HikariConfig();
-        config.setJdbcUrl(DB_URL);
-        config.setUsername(DB_USER);
-        config.setPassword(DB_PASSWORD);
-        config.setMaximumPoolSize(5);
-        config.setMinimumIdle(1);
-        config.setConnectionTimeout(30000);
-        this.dataSource = new HikariDataSource(config);
+        this.dataSource = DatabaseConfig.createDataSource();
         initSchema();
     }
 
@@ -81,11 +70,40 @@ public class BookingRepository {
             seatsJson = "[]";
         }
 
-        String sql = """
-            MERGE INTO bookings (pnr, user_name, train_no, train_name, journey_date, cls, total_fare,
-                                 booked_at, payment_method, transaction_id, payment_status, status, cancelled_at, refund_amount, passengers_json, seat_numbers_json)
-            KEY(pnr) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """;
+        // Portable upsert for both MySQL and H2
+        String sql;
+        if (DatabaseConfig.isMySqlConfigured()) {
+            sql = """
+                INSERT INTO bookings (pnr, user_name, train_no, train_name, journey_date, cls, total_fare,
+                                      booked_at, payment_method, transaction_id, payment_status, status,
+                                      cancelled_at, refund_amount, passengers_json, seat_numbers_json)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON DUPLICATE KEY UPDATE
+                    user_name = VALUES(user_name),
+                    train_no = VALUES(train_no),
+                    train_name = VALUES(train_name),
+                    journey_date = VALUES(journey_date),
+                    cls = VALUES(cls),
+                    total_fare = VALUES(total_fare),
+                    booked_at = VALUES(booked_at),
+                    payment_method = VALUES(payment_method),
+                    transaction_id = VALUES(transaction_id),
+                    payment_status = VALUES(payment_status),
+                    status = VALUES(status),
+                    cancelled_at = VALUES(cancelled_at),
+                    refund_amount = VALUES(refund_amount),
+                    passengers_json = VALUES(passengers_json),
+                    seat_numbers_json = VALUES(seat_numbers_json)
+                """;
+        } else {
+            // H2 MERGE syntax
+            sql = """
+                MERGE INTO bookings (pnr, user_name, train_no, train_name, journey_date, cls, total_fare,
+                                     booked_at, payment_method, transaction_id, payment_status, status,
+                                     cancelled_at, refund_amount, passengers_json, seat_numbers_json)
+                KEY(pnr) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """;
+        }
 
         try (Connection conn = dataSource.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {

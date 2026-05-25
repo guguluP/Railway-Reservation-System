@@ -56,19 +56,39 @@ The app now supports **real username + password login** (replacing the old passw
 - **Default admin**: `admin` / `admin`
 - New users can self-register (password ≥ 4 characters, stored with BCrypt).
 
-**Optional: Use MySQL instead of embedded H2** for the `users` table (passwords + roles):
+**MySQL Support (Users + Bookings)**
 
-1. Create a MySQL database and user.
-2. Set environment variables before launching:
-   ```bash
-   export MYSQL_URL="jdbc:mysql://localhost:3306/railway?useSSL=false&serverTimezone=UTC"
-   export MYSQL_USER="youruser"
-   export MYSQL_PASSWORD="yourpass"
+Both **user accounts (with BCrypt passwords)** and **all bookings** can now be stored in MySQL instead of the embedded H2 database.
+
+### Steps:
+1. Create your MySQL database:
+   ```sql
+   CREATE DATABASE RailwayReservation CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
    ```
-3. Run the app as usual (`mvn javafx:run`).
-4. The `users` table (with hashed passwords) will be created automatically.
 
-Bookings still use the local H2 file DB (for simplicity). Full MySQL for everything is future work.
+2. Set these environment variables **before** running the app:
+
+   ```bash
+   export MYSQL_URL="jdbc:mysql://127.0.0.1:3306/RailwayReservation?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC"
+   export MYSQL_USER="root"
+   export MYSQL_PASSWORD="lunapnb1"
+   ```
+
+3. (Optional but recommended) Create the tables manually (the app will also create them automatically):
+   ```sql
+   USE RailwayReservation;
+   -- (paste the users + bookings table SQL from the project or let the app auto-create)
+   ```
+
+4. Run the application:
+   ```bash
+   mvn clean javafx:run
+   ```
+
+When `MYSQL_URL` is set, the app automatically uses MySQL via HikariCP for both `users` and `bookings` tables.  
+When not set, it falls back to the local H2 file database (previous default behavior).
+
+**Note:** The default admin account (`admin` / `admin`) is created automatically on first run if it doesn't exist.
 
 ## 📦 Build Fat Jar (optional)
 

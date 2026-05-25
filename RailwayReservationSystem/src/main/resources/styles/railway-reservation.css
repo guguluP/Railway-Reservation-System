@@ -887,3 +887,32 @@
     -fx-scale-y: 1.2;
     -fx-transition: all 0.1s;
 }
+
+/* ============================================================
+   NEW: First Login Window + Guest Search Preview styles
+   ============================================================ */
+.login-window {
+    -fx-background-color: linear-gradient(to bottom, #0a192f, #112240);
+}
+
+.login-card {
+    -fx-background-color: rgba(255,255,255,0.06);
+    -fx-background-radius: 12;
+    -fx-border-color: rgba(255,153,51,0.2);
+    -fx-border-width: 1;
+    -fx-border-radius: 12;
+    -fx-padding: 8;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.5), 12, 0.3, 0, 4);
+}
+
+.login-preview-search {
+    -fx-background-color: rgba(255,255,255,0.03);
+    -fx-background-radius: 10;
+    -fx-border-color: rgba(255,255,255,0.08);
+    -fx-border-radius: 10;
+    -fx-padding: 12;
+}
+
+.login-preview-search .label {
+    -fx-text-fill: #cbd5e1;
+}

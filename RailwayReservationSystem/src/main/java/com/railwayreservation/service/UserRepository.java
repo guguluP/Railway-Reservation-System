@@ -18,21 +18,10 @@ import org.mindrot.jbcrypt.BCrypt;
  */
 public class UserRepository {
 
-    private static final String DB_URL = "jdbc:h2:file:" + System.getProperty("user.home") + "/.railway-reservation/railway;AUTO_SERVER=FALSE";
-    private static final String DB_USER = "sa";
-    private static final String DB_PASSWORD = "";
-
     private final HikariDataSource dataSource;
 
     public UserRepository() {
-        HikariConfig config = new HikariConfig();
-        config.setJdbcUrl(DB_URL);
-        config.setUsername(DB_USER);
-        config.setPassword(DB_PASSWORD);
-        config.setMaximumPoolSize(5);
-        config.setMinimumIdle(1);
-        config.setConnectionTimeout(30000);
-        this.dataSource = new HikariDataSource(config);
+        this.dataSource = DatabaseConfig.createDataSource();
         initSchema();
     }
 
@@ -76,8 +65,23 @@ public class UserRepository {
     public void createUser(String username, String password, String role) {
         String now = java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ISO_LOCAL_DATE_TIME);
         String hash = (password == null || password.isEmpty()) ? "" : BCrypt.hashpw(password, BCrypt.gensalt(12));
-        
-        String sql = "MERGE INTO users (username, password, role, created_at, last_login_at) KEY(username) VALUES (?, ?, ?, ?, ?)";
+
+        // Portable upsert that works on both MySQL and H2
+        String sql;
+        if (DatabaseConfig.isMySqlConfigured()) {
+            sql = """
+                INSERT INTO users (username, password, role, created_at, last_login_at)
+                VALUES (?, ?, ?, ?, ?)
+                ON DUPLICATE KEY UPDATE 
+                    password = VALUES(password),
+                    role = VALUES(role),
+                    last_login_at = VALUES(last_login_at)
+                """;
+        } else {
+            // H2 MERGE syntax
+            sql = "MERGE INTO users (username, password, role, created_at, last_login_at) KEY(username) VALUES (?, ?, ?, ?, ?)";
+        }
+
         try (Connection conn = dataSource.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setString(1, username);

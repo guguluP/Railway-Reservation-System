@@ -99,6 +99,8 @@ public class RailwayApp extends Application {
     private List<Button> navTabButtons = new ArrayList<>();
     private Circle userAvatar;
     private ContextMenu avatarContextMenu;
+    private Label avatarInitialLabel;
+    private StackPane avatarStack;
 
     private static final List<String> CLASS_OPTIONS = List.of("SL", "3A", "2A", "1A", "2S", "CC", "EC", "P");
 
@@ -133,6 +135,10 @@ public class RailwayApp extends Application {
         // Initial load
         refreshStations();
         updateStatus();
+
+        // NEW: Show the first login window (prominent but non-blocking)
+        // Main search UI is already visible underneath
+        Platform.runLater(this::createAndShowInitialLoginWindow);
     }
 
     private Node buildIRCTCHeader() {
@@ -161,7 +167,11 @@ public class RailwayApp extends Application {
             if (i == 0) tab.getStyleClass().add("nav-tab-active");
             final String sid = tabIds[i];
             tab.setOnAction(e -> {
-                switchToSection(sid);
+                if ("bookings".equals(sid)) {
+                    requireLoginForAction(() -> switchToSection(sid));
+                } else {
+                    switchToSection(sid);
+                }
             });
             navTabButtons.add(tab);
             navTabs.getChildren().add(tab);
@@ -184,9 +194,9 @@ public class RailwayApp extends Application {
         userAvatar.setFill(Color.web("#ff9933"));
         userAvatar.setStroke(Color.web("#003366"));
         userAvatar.setStrokeWidth(1.5);
-        Label avatarInitial = new Label(currentUser.substring(0,1).toUpperCase());
-        avatarInitial.setStyle("-fx-text-fill:white; -fx-font-weight:bold; -fx-font-size:12px;");
-        StackPane avatarStack = new StackPane(userAvatar, avatarInitial);
+        avatarInitialLabel = new Label(currentUser.substring(0, 1).toUpperCase());
+        avatarInitialLabel.setStyle("-fx-text-fill:white; -fx-font-weight:bold; -fx-font-size:12px;");
+        avatarStack = new StackPane(userAvatar, avatarInitialLabel);
         avatarStack.setOnMouseClicked(e -> showAvatarContextMenu(avatarStack, e));
         addTooltip(avatarStack, "Account • " + currentUser);
 
@@ -199,6 +209,7 @@ public class RailwayApp extends Application {
         rightBox.setAlignment(Pos.CENTER_RIGHT);
 
         header.getChildren().addAll(leftBox, navTabs, centerGrow, rightBox);
+        updateAvatarDisplay();
         return header;
     }
 
@@ -206,7 +217,33 @@ public class RailwayApp extends Application {
         if (profileMenu != null) {
             profileMenu.setText("👤 " + currentUser + ("admin".equals(currentUserRole) ? " (admin)" : ""));
         }
-        // Avatar tooltip updated via recreation on next header build or manual
+    }
+
+    private void updateAvatarDisplay() {
+        if (avatarInitialLabel != null) {
+            avatarInitialLabel.setText(currentUser.substring(0, 1).toUpperCase());
+        }
+        if (avatarStack != null) {
+            addTooltip(avatarStack, "Account • " + currentUser +
+                ("admin".equals(currentUserRole) ? " (admin)" : ""));
+        }
+    }
+
+    private void setCurrentUser(String name, String role) {
+        currentUser = name;
+        currentUserRole = role;
+        updateUserDisplay();
+        updateAvatarDisplay();
+        userRepository.updateLastLogin(name);
+
+        boolean wasShowingBookings = (bookingsView != null && mainContentArea != null &&
+            mainContentArea.getChildren().contains(bookingsView));
+        bookingsView = buildBookingsView();
+        if (wasShowingBookings && mainContentArea != null) {
+            mainContentArea.getChildren().clear();
+            mainContentArea.getChildren().add(bookingsView);
+        }
+        Platform.runLater(this::refreshBookingsView);
     }
 
     private void showAvatarContextMenu(StackPane anchor, javafx.scene.input.MouseEvent e) {
@@ -227,7 +264,12 @@ public class RailwayApp extends Application {
             MenuItem settingsItem = new MenuItem("Settings");
             settingsItem.setOnAction(ev -> showSettingsDialog());
             MenuItem bookingsItem = new MenuItem("My Bookings");
-            bookingsItem.setOnAction(ev -> { switchToView(bookingsView); updateActiveNav("bookings"); });
+            bookingsItem.setOnAction(ev -> {
+                requireLoginForAction(() -> {
+                    switchToView(bookingsView);
+                    updateActiveNav("bookings");
+                });
+            });
             MenuItem liveItem = new MenuItem("Live Trains");
             liveItem.setOnAction(ev -> { switchToView(liveView); updateActiveNav("live"); });
             MenuItem adminItem = new MenuItem("Admin Panel");
@@ -242,10 +284,7 @@ public class RailwayApp extends Application {
             });
             MenuItem logoutItem = new MenuItem("Logout");
             logoutItem.setOnAction(ev -> {
-                currentUser = "Guest";
-                currentUserRole = "user";
-                updateUserDisplay();
-                refreshBookingsView();
+                setCurrentUser("Guest", "user");
                 applyTheme(currentTheme);
             });
             avatarContextMenu.getItems().addAll(loginItem, profileItem, settingsItem, new SeparatorMenuItem(),
@@ -289,6 +328,20 @@ public class RailwayApp extends Application {
         dialog.setTitle("Login or Register");
         dialog.getDialogPane().getButtonTypes().addAll(ButtonType.CANCEL);
 
+        Node authForm = buildAuthForm(name -> {
+            dialog.setResult(true);
+            dialog.close();
+        }, () -> dialog.close());
+
+        dialog.getDialogPane().setContent(authForm);
+        dialog.showAndWait();
+    }
+
+    /**
+     * Reusable authentication form (Login + Register).
+     * Used by both the legacy dialog and the new first-login window.
+     */
+    private Node buildAuthForm(java.util.function.Consumer<String> onLoginSuccess, Runnable onCancel) {
         VBox content = new VBox(14);
         content.setPadding(new Insets(18));
         content.setPrefWidth(380);
@@ -347,7 +400,6 @@ public class RailwayApp extends Application {
                 regStatus);
 
         content.getChildren().addAll(loginBox, new Separator(), regBox);
-        dialog.getDialogPane().setContent(content);
 
         // Login action
         loginBtn.setOnAction(e -> {
@@ -360,13 +412,8 @@ public class RailwayApp extends Application {
             boolean ok = userRepository.authenticate(u.trim(), p);
             if (ok) {
                 String name = u.trim();
-                currentUser = name;
-                currentUserRole = userRepository.getRole(name);
-                updateUserDisplay();
-                userRepository.updateLastLogin(name);
-                refreshBookingsView();
-                dialog.setResult(true);
-                dialog.close();
+                setCurrentUser(name, userRepository.getRole(name));
+                if (onLoginSuccess != null) onLoginSuccess.accept(name);
             } else {
                 loginStatus.setText("Invalid credentials");
             }
@@ -391,21 +438,14 @@ public class RailwayApp extends Application {
                 return;
             }
             userRepository.createUser(name, p1, "user");
-            // auto-login after register
-            currentUser = name;
-            currentUserRole = "user";
-            updateUserDisplay();
-            userRepository.updateLastLogin(name);
-            refreshBookingsView();
-            dialog.setResult(true);
-            dialog.close();
+            setCurrentUser(name, "user");
+            if (onLoginSuccess != null) onLoginSuccess.accept(name);
         });
 
-        // Allow Enter key on password fields to trigger login
         loginPw.setOnAction(e -> loginBtn.fire());
         regPw2.setOnAction(e -> regBtn.fire());
 
-        dialog.showAndWait();
+        return content;
     }
 
     private Node buildMainContent() {
@@ -475,7 +515,12 @@ public class RailwayApp extends Application {
         btnSearch.setOnAction(e -> { switchToView(searchView); updateActiveNav("search"); });
 
         Button btnBookings = createNavButton("🎫  My Bookings", false);
-        btnBookings.setOnAction(e -> { switchToView(bookingsView); updateActiveNav("bookings"); });
+        btnBookings.setOnAction(e -> {
+            requireLoginForAction(() -> {
+                switchToView(bookingsView);
+                updateActiveNav("bookings");
+            });
+        });
 
         Button btnLive = createNavButton("🚄  Live Trains", false);
         btnLive.setOnAction(e -> { switchToView(liveView); updateActiveNav("live"); });
@@ -772,16 +817,18 @@ public class RailwayApp extends Application {
                 Button bookBtn = new Button("Book Now →");
                 bookBtn.getStyleClass().add("primary-button");
                 bookBtn.setOnAction(ev -> {
-                    String pref = null;
-                    if (classCombo != null) {
-                        String d = classCombo.getValue();
-                        if (d != null && !d.equals("All Classes") && d.contains("(") && d.endsWith(")")) {
-                            int o = d.lastIndexOf('(');
-                            int c = d.lastIndexOf(')');
-                            pref = d.substring(o + 1, c).trim();
+                    requireLoginForAction(() -> {
+                        String pref = null;
+                        if (classCombo != null) {
+                            String d = classCombo.getValue();
+                            if (d != null && !d.equals("All Classes") && d.contains("(") && d.endsWith(")")) {
+                                int o = d.lastIndexOf('(');
+                                int c = d.lastIndexOf(')');
+                                pref = d.substring(o + 1, c).trim();
+                            }
                         }
-                    }
-                    openBookingDialog(train, pref);
+                        openBookingDialog(train, pref);
+                    });
                 });
 
                 card.getChildren().addAll(info, spacer2, bookBtn);
@@ -1251,9 +1298,9 @@ public class RailwayApp extends Application {
     }
 
     private void showSuccessPNR(Train train, String cls, List<Passenger> pax, String journeyDate) {
-        // Find the latest booking for this user/train
+        // Find the latest booking for this user/train (bookings are sorted DESC by booked_at)
         List<Booking> userBookings = dataService.getBookingsForUser(currentUser);
-        Booking latest = userBookings.isEmpty() ? null : userBookings.get(userBookings.size() - 1);
+        Booking latest = userBookings.isEmpty() ? null : userBookings.get(0);
 
         Stage success = new Stage();
         success.initModality(Modality.APPLICATION_MODAL);
@@ -1487,6 +1534,8 @@ public class RailwayApp extends Application {
                         payDialog.close();
                         Platform.runLater(() -> {
                             showPaymentReceipt(train, cls, paxList, journeyDate, totalFare, method, txnId);
+                            // PNR / ticket confirmation now reliably pops after the receipt is closed
+                            showSuccessPNR(train, cls, paxList, journeyDate);
                             resultsListView.refresh();
                             refreshBookingsView();
                             updateStatus();
@@ -1580,18 +1629,15 @@ public class RailwayApp extends Application {
                 pax.size() + " Passenger(s)");
         details.getStyleClass().add("receipt-details");
 
-        Button viewTicket = new Button("View PNR & Ticket");
-        viewTicket.getStyleClass().add("primary-button");
-        viewTicket.setOnAction(e -> {
-            receipt.close();
-            showSuccessPNR(train, cls, pax, journeyDate);   // reuse existing PNR dialog
-        });
+        Label note = new Label("Your PNR / ticket will be shown after closing this receipt.");
+        note.getStyleClass().add("note");
+        note.setStyle("-fx-font-size:11px; -fx-text-fill:#666;");
 
         Button done = new Button("Done");
-        done.getStyleClass().add("secondary-button");
+        done.getStyleClass().add("primary-button");
         done.setOnAction(e -> receipt.close());
 
-        HBox btns = new HBox(10, viewTicket, done);
+        HBox btns = new HBox(10, note, done);
         btns.setAlignment(Pos.CENTER_RIGHT);
 
         box.getChildren().addAll(title, txn, details, btns);
@@ -1606,6 +1652,11 @@ public class RailwayApp extends Application {
     // ==================== END PHASE 3 ====================
 
     private Node buildBookingsTab() {
+        // If guest, show friendly login-required placeholder instead of empty list
+        if ("Guest".equalsIgnoreCase(currentUser)) {
+            return buildGuestBookingsPlaceholder();
+        }
+
         VBox container = new VBox(12);
         container.setPadding(new Insets(20));
         container.getStyleClass().add("bookings-container");
@@ -2045,6 +2096,171 @@ public class RailwayApp extends Application {
             box.setItems(FXCollections.observableArrayList(filtered));
             if (!box.isShowing()) box.show();
         });
+    }
+
+    // ============================================================
+    // NEW: First Login Window + Login Enforcement (per plan)
+    // ============================================================
+
+    private Stage initialLoginStage;
+
+    /**
+     * Shows a prominent, non-modal first-login window on startup.
+     * Main app (with full search) is already visible underneath.
+     * Includes simplified search preview as requested.
+     */
+    private void createAndShowInitialLoginWindow() {
+        if (initialLoginStage != null && initialLoginStage.isShowing()) return;
+
+        initialLoginStage = new Stage();
+        initialLoginStage.initOwner(primaryStage);
+        initialLoginStage.initModality(Modality.NONE);
+        initialLoginStage.setTitle("IRCTC Rail Connect – Welcome");
+        initialLoginStage.setMinWidth(620);
+        initialLoginStage.setMinHeight(520);
+
+        BorderPane root = new BorderPane();
+        root.getStyleClass().add("login-window");
+
+        // Top header
+        VBox header = new VBox(4);
+        header.setPadding(new Insets(16, 20, 12, 20));
+        header.setAlignment(Pos.CENTER_LEFT);
+        Label h1 = new Label("Welcome to IRCTC Rail Connect");
+        h1.setStyle("-fx-font-size:20px; -fx-font-weight:bold; -fx-text-fill:#ff9933;");
+        Label h2 = new Label("Login or Register to book tickets. Search is available for everyone.");
+        h2.setStyle("-fx-text-fill:#94a3b8; -fx-font-size:13px;");
+        header.getChildren().addAll(h1, h2);
+        root.setTop(header);
+
+        // Center: Auth + Search Preview side-by-side
+        HBox center = new HBox(16);
+        center.setPadding(new Insets(10, 20, 10, 20));
+        center.setAlignment(Pos.TOP_CENTER);
+
+        // Left: Auth form
+        Node auth = buildAuthForm(name -> {
+            Platform.runLater(() -> {
+                if (initialLoginStage != null) initialLoginStage.close();
+            });
+        }, () -> {});
+
+        VBox authCard = new VBox(auth);
+        authCard.getStyleClass().add("login-card");
+        authCard.setPrefWidth(380);
+
+        // Right: Simplified search preview
+        VBox preview = new VBox(8);
+        preview.setPrefWidth(260);
+        preview.getStyleClass().add("login-preview-search");
+
+        Label pTitle = new Label("Quick Search (Guest OK)");
+        pTitle.setStyle("-fx-font-weight:bold; -fx-font-size:13px;");
+
+        ComboBox<String> pFrom = new ComboBox<>();
+        pFrom.getItems().addAll(dataService.getAllStations());
+        pFrom.setEditable(true);
+        pFrom.setPrefWidth(240);
+        pFrom.setPromptText("From station");
+
+        ComboBox<String> pTo = new ComboBox<>();
+        pTo.getItems().addAll(dataService.getAllStations());
+        pTo.setEditable(true);
+        pTo.setPrefWidth(240);
+        pTo.setPromptText("To station");
+
+        Button pSearch = new Button("🔍 Search Trains Now");
+        pSearch.getStyleClass().add("primary-button");
+        pSearch.setMaxWidth(Double.MAX_VALUE);
+        pSearch.setOnAction(e -> {
+            if (pFrom.getValue() != null && pTo.getValue() != null) {
+                fromBox.setValue(pFrom.getValue());
+                toBox.setValue(pTo.getValue());
+                switchToSection("search");
+                performSearch();
+                if (initialLoginStage != null) initialLoginStage.close();
+            } else {
+                showAlert(Alert.AlertType.WARNING, "Search", "Please select From and To stations.");
+            }
+        });
+
+        preview.getChildren().addAll(pTitle, pFrom, pTo, pSearch);
+
+        center.getChildren().addAll(authCard, preview);
+        root.setCenter(center);
+
+        // Bottom: Big Guest CTA
+        HBox footer = new HBox();
+        footer.setPadding(new Insets(12, 20, 16, 20));
+        footer.setAlignment(Pos.CENTER);
+
+        Button guestBtn = new Button("Continue as Guest – Just Search Trains");
+        guestBtn.getStyleClass().add("secondary-button");
+        guestBtn.setStyle("-fx-font-size:14px; -fx-padding:10 24;");
+        guestBtn.setOnAction(e -> {
+            if (initialLoginStage != null) initialLoginStage.close();
+        });
+
+        footer.getChildren().add(guestBtn);
+        root.setBottom(footer);
+
+        Scene scene = new Scene(root, 640, 520);
+        var css = getClass().getResource("/styles/railway-reservation.css");
+        if (css != null) scene.getStylesheets().add(css.toExternalForm());
+
+        initialLoginStage.setScene(scene);
+        initialLoginStage.show();
+    }
+
+    /**
+     * If user is Guest, shows the login dialog and runs the action only after successful login.
+     * Used for "Book Now" and "My Bookings".
+     */
+    private void requireLoginForAction(Runnable actionAfterLogin) {
+        if (!"Guest".equalsIgnoreCase(currentUser)) {
+            actionAfterLogin.run();
+            return;
+        }
+
+        // Show the familiar login dialog
+        showUserSelectionDialog();
+
+        // After dialog closes, check again
+        Platform.runLater(() -> {
+            if (!"Guest".equalsIgnoreCase(currentUser)) {
+                actionAfterLogin.run();
+            }
+        });
+    }
+
+    /**
+     * Returns a friendly "login required" placeholder for the bookings tab when user is Guest.
+     */
+    private Node buildGuestBookingsPlaceholder() {
+        VBox box = new VBox(16);
+        box.setAlignment(Pos.CENTER);
+        box.setPadding(new Insets(40));
+        box.getStyleClass().add("bookings-container");
+
+        Label icon = new Label("🔐");
+        icon.setStyle("-fx-font-size:48px;");
+
+        Label title = new Label("Login Required");
+        title.setStyle("-fx-font-size:22px; -fx-font-weight:bold; -fx-text-fill:#ff9933;");
+
+        Label msg = new Label("Please login or register to view and manage your bookings.\nSearch is available without an account.");
+        msg.setStyle("-fx-text-alignment:center; -fx-text-fill:#94a3b8;");
+
+        Button loginBtn = new Button("Login / Register");
+        loginBtn.getStyleClass().add("primary-button");
+        loginBtn.setOnAction(e -> showUserSelectionDialog());
+
+        Button guestSearch = new Button("Back to Search");
+        guestSearch.getStyleClass().add("secondary-button");
+        guestSearch.setOnAction(e -> switchToSection("search"));
+
+        box.getChildren().addAll(icon, title, msg, loginBtn, guestSearch);
+        return box;
     }
 
     public static void main(String[] args) {

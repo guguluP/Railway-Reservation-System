@@ -121,15 +121,8 @@ public class DataService {
             .configure(com.fasterxml.jackson.databind.DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
         ensureDataDir();
         
-        // Create shared HikariCP datasource
-        HikariConfig config = new HikariConfig();
-        config.setJdbcUrl("jdbc:h2:file:" + System.getProperty("user.home") + "/.railway-reservation/railway;AUTO_SERVER=FALSE");
-        config.setUsername("sa");
-        config.setPassword("");
-        config.setMaximumPoolSize(5);
-        config.setMinimumIdle(1);
-        config.setConnectionTimeout(30000);
-        this.sharedDataSource = new HikariDataSource(config);
+        // Create shared HikariCP datasource (MySQL if MYSQL_URL is set, else H2)
+        this.sharedDataSource = DatabaseConfig.createDataSource();
         
         // Share datasource between repositories
         this.bookingRepository = new BookingRepository(sharedDataSource);
@@ -342,7 +335,7 @@ public class DataService {
         String t = resolveStation(to).toLowerCase();
 
         return trains.stream()
-            .filter(tr -> matchesRoute(tr, f, t))
+            .filter(tr -> matchesRoute(tr, f, t) && (date == null || isTrainRunningOn(date, tr.getFrequency())))
             .sorted(Comparator.comparing(Train::getDeparture, Comparator.nullsLast(Comparator.naturalOrder())))
             .collect(Collectors.toList());
     }
@@ -408,6 +401,22 @@ public class DataService {
         return trimmed;
     }
 
+    /** Minimal helper: returns true if the train's frequency string indicates it runs on the given journey date's weekday.
+     *  Supports "Daily", "M.Th.Sa", "Tu.W.F.Su" and similar notations from real timetable data. */
+    private boolean isTrainRunningOn(LocalDate journeyDate, String frequency) {
+        if (journeyDate == null || frequency == null || frequency.isBlank()) return true;
+        String f = frequency.toUpperCase();
+        if (f.contains("DAILY") || f.contains("VARIOUS")) return true;
+        if (f.contains("EXCEPT")) return true; // conservative for minimal change (future: parse exclusions)
+        int dow = journeyDate.getDayOfWeek().getValue(); // 1=Mon ... 7=Sun
+        String[] markers = {"M","T","W","T","F","S","S"};
+        String m = markers[dow - 1];
+        if (f.contains(m)) return true;
+        if (dow == 2 && f.contains("TU")) return true;
+        if (dow == 4 && f.contains("TH")) return true;
+        return false;
+    }
+
     public double calculateFare(Train train, String cls, int numPassengers) {
         double mult = CLASS_MULTIPLIERS.getOrDefault(cls, 1.0);
         return Math.round(train.getBaseFare() * mult * numPassengers * 100.0) / 100.0;
@@ -470,7 +479,13 @@ public class DataService {
     }
 
     public List<Booking> getAllBookings() {
-        return new ArrayList<>(bookings);
+        return bookings.stream()
+            .sorted((b1, b2) -> {
+                String time1 = b1.getBookedAt() != null ? b1.getBookedAt() : "";
+                String time2 = b2.getBookedAt() != null ? b2.getBookedAt() : "";
+                return time2.compareTo(time1); // DESC order (newer first)
+            })
+            .collect(Collectors.toList());
     }
 
     public List<Booking> getBookingsForUser(String userName) {
@@ -480,6 +495,11 @@ public class DataService {
         String u = userName.trim();
         return bookings.stream()
             .filter(b -> b.getUserName().equalsIgnoreCase(u))
+            .sorted((b1, b2) -> {
+                String time1 = b1.getBookedAt() != null ? b1.getBookedAt() : "";
+                String time2 = b2.getBookedAt() != null ? b2.getBookedAt() : "";
+                return time2.compareTo(time1); // DESC order (newer first)
+            })
             .collect(Collectors.toList());
     }
 
